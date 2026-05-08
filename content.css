@@ -1,0 +1,27 @@
+/* content.css — injected into every page for claim highlights */
+
+.verifyai-highlight {
+  border-radius: 3px;
+  padding: 1px 2px;
+  cursor: help;
+  transition: opacity 0.2s;
+}
+
+.verifyai-highlight:hover {
+  opacity: 0.8;
+}
+
+.verifyai-verified {
+  background: rgba(34, 197, 94, 0.25);
+  border-bottom: 2px solid rgba(34, 197, 94, 0.7);
+}
+
+.verifyai-unverified {
+  background: rgba(251, 191, 36, 0.25);
+  border-bottom: 2px solid rgba(251, 191, 36, 0.7);
+}
+
+.verifyai-false {
+  background: rgba(239, 68, 68, 0.25);
+  border-bottom: 2px solid rgba(239, 68, 68, 0.7);
+}

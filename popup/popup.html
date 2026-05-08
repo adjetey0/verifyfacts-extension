@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VerifyFacts</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+  <!-- ── Header ───────────────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <div class="logo-mark">
+        <span class="logo-v">V</span>
+      </div>
+      <span class="logo-text">VerifyFacts</span>
+    </div>
+    <button class="settings-btn" id="settingsToggle" title="Settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ── Settings panel ───────────────────────────────────────────────────── -->
+  <section class="settings-panel hidden" id="settingsPanel">
+    <label class="field-label">Google Gemini API Key — Free</label>
+    <div class="api-row">
+      <input type="password" id="apiKeyInput" placeholder="AIza…" spellcheck="false">
+      <button class="btn-save" id="saveKey">Save</button>
+    </div>
+    <p class="hint">Free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> · 1,500 checks/day free</p>
+  </section>
+
+  <section class="no-key-notice hidden" id="noKeyNotice">
+    <div class="notice-icon">🔑</div>
+    <p>Add your <strong>free</strong> Gemini API key to get started — 1,500 checks per day at no cost.</p>
+    <button class="btn-primary" id="goToSettings">Open settings</button>
+  </section>
+
+  <!-- ── Idle state ────────────────────────────────────────────────────────── -->
+  <section class="idle-state" id="idleState">
+    <p class="idle-hint">What should I verify?</p>
+    <div class="mode-grid">
+      <button class="mode-btn" data-mode="page">
+        <span class="mode-icon">📰</span>
+        <span>This page</span>
+      </button>
+      <button class="mode-btn" data-mode="selection">
+        <span class="mode-icon">✂️</span>
+        <span>Selection</span>
+      </button>
+      <button class="mode-btn" data-mode="image">
+        <span class="mode-icon">🖼️</span>
+        <span>Main image</span>
+      </button>
+      <button class="mode-btn" data-mode="url">
+        <span class="mode-icon">🔗</span>
+        <span>Enter URL</span>
+      </button>
+    </div>
+    <div class="url-row hidden" id="urlRow">
+      <input type="url" id="urlInput" placeholder="https://example.com/article">
+      <button class="btn-primary small" id="verifyUrl">Go</button>
+    </div>
+  </section>
+
+  <!-- ── Loading state ────────────────────────────────────────────────────── -->
+  <section class="loading-state hidden" id="loadingState">
+    <div class="loader-ring"></div>
+    <p class="loading-label" id="loadingLabel">Analyzing content…</p>
+    <div class="loading-steps" id="loadingSteps">
+      <div class="step active" id="step1">Extracting claims</div>
+      <div class="step" id="step2">Searching sources</div>
+      <div class="step" id="step3">Generating verdict</div>
+    </div>
+  </section>
+
+  <!-- ── Result state ─────────────────────────────────────────────────────── -->
+  <section class="result-state hidden" id="resultState">
+
+    <!-- Verdict card -->
+    <div class="verdict-card" id="verdictCard">
+      <div class="verdict-top">
+        <div class="verdict-badge" id="verdictBadge">—</div>
+        <div class="score-ring-wrap">
+          <svg class="score-ring" viewBox="0 0 56 56">
+            <circle class="ring-bg" cx="28" cy="28" r="22"/>
+            <circle class="ring-fill" id="ringFill" cx="28" cy="28" r="22"
+              stroke-dasharray="138.2" stroke-dashoffset="138.2"/>
+          </svg>
+          <span class="score-num" id="scoreNum">—</span>
+        </div>
+      </div>
+      <p class="summary" id="summary"></p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="claims">Claims</button>
+      <button class="tab" data-tab="sources">Sources</button>
+      <button class="tab" data-tab="flags">Flags</button>
+    </div>
+
+    <!-- Tab: Claims -->
+    <div class="tab-panel" id="tab-claims">
+      <ul class="claims-list" id="claimsList"></ul>
+      <button class="btn-highlight hidden" id="highlightBtn">Highlight on page</button>
+    </div>
+
+    <!-- Tab: Sources -->
+    <div class="tab-panel hidden" id="tab-sources">
+      <ul class="sources-list" id="sourcesList"></ul>
+    </div>
+
+    <!-- Tab: Flags -->
+    <div class="tab-panel hidden" id="tab-flags">
+      <ul class="flags-list" id="flagsList"></ul>
+    </div>
+
+    <button class="btn-reset" id="resetBtn">← Verify something else</button>
+  </section>
+
+  <!-- ── Error state ──────────────────────────────────────────────────────── -->
+  <section class="error-state hidden" id="errorState">
+    <div class="error-icon">⚠️</div>
+    <p class="error-msg" id="errorMsg"></p>
+    <button class="btn-primary" id="retryBtn">Try again</button>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>
