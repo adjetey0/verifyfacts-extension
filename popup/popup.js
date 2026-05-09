@@ -1,4 +1,4 @@
-// popup.js — VerifyAI popup controller
+// popup.js — VerifyFacts popup controller
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let currentPayload = null;
@@ -16,8 +16,35 @@ const sections = {
   error: $("errorState")
 };
 
+// ── Theme ─────────────────────────────────────────────────────────────────────
+function applyTheme(theme) {
+  document.body.classList.toggle("light", theme === "light");
+  // Swap header icon
+  const moon = $("themeIconMoon");
+  const sun  = $("themeIconSun");
+  if (moon) moon.classList.toggle("hidden", theme === "light");
+  if (sun)  sun.classList.toggle("hidden",  theme !== "light");
+  // Sync pill buttons in settings
+  const darkBtn  = $("darkBtn");
+  const lightBtn = $("lightBtn");
+  if (darkBtn)  darkBtn.classList.toggle("active",  theme !== "light");
+  if (lightBtn) lightBtn.classList.toggle("active", theme === "light");
+}
+
+async function loadTheme() {
+  const { theme } = await chrome.storage.local.get(["theme"]);
+  applyTheme(theme || "dark");
+}
+
+function saveTheme(theme) {
+  chrome.storage.local.set({ theme });
+  applyTheme(theme);
+  showToast(theme === "light" ? "Light mode ☀️" : "Dark mode 🌙");
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
+  await loadTheme();
   const apiKey = await getApiKey();
   if (!apiKey) {
     show("noKey");
@@ -30,6 +57,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // ── Event bindings ────────────────────────────────────────────────────────────
 function bindEvents() {
+  // Theme toggle button in header
+  const themeToggle = $("themeToggle");
+  if (themeToggle) {
+    themeToggle.addEventListener("click", () => {
+      const isLight = document.body.classList.contains("light");
+      saveTheme(isLight ? "dark" : "light");
+    });
+  }
+
+  // Theme pill buttons inside settings panel
+  const darkBtn  = $("darkBtn");
+  const lightBtn = $("lightBtn");
+  if (darkBtn)  darkBtn.addEventListener("click",  () => saveTheme("dark"));
+  if (lightBtn) lightBtn.addEventListener("click", () => saveTheme("light"));
+
   // Settings toggle
   $("settingsToggle").addEventListener("click", () => {
     sections.settings.classList.toggle("hidden");
@@ -267,7 +309,6 @@ function animateSteps() {
     $("loadingLabel").textContent = labels[i];
   }, 3500);
 
-  // Store so we can cancel if needed
   window._stepInterval = interval;
 }
 
@@ -318,12 +359,16 @@ function escHtml(str) {
 }
 
 function showToast(msg) {
+  const existing = document.querySelector(".vf-toast");
+  if (existing) existing.remove();
   const t = document.createElement("div");
+  t.className = "vf-toast";
   t.style.cssText = `
     position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
-    background:#c6f135;color:#0c0c0e;font-family:'DM Mono',monospace;
-    font-size:11px;font-weight:500;padding:6px 14px;border-radius:100px;
-    opacity:1;transition:opacity 0.4s;z-index:99;
+    background:var(--accent);color:var(--accent-text);
+    font-family:'DM Mono',monospace;font-size:11px;font-weight:500;
+    padding:6px 14px;border-radius:100px;opacity:1;
+    transition:opacity 0.4s;z-index:99;white-space:nowrap;
   `;
   t.textContent = msg;
   document.body.appendChild(t);
