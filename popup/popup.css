@@ -1,8 +1,9 @@
-/* popup.css — VerifyAI Extension UI
-   Aesthetic: dark editorial, monospaced accents, surgical precision */
+/* popup.css — VerifyFacts Extension UI
+   Supports dark (default) and light themes */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Dark theme (default) ────────────────────────────────────────────────── */
 :root {
   --bg: #0c0c0e;
   --bg2: #141418;
@@ -13,6 +14,7 @@
   --muted: #7a7a8a;
   --accent: #c6f135;
   --accent2: #a8d420;
+  --accent-text: #0c0c0e;
   --red: #ff5252;
   --amber: #ffb347;
   --green: #4dff91;
@@ -22,6 +24,24 @@
   --font-mono: 'DM Mono', monospace;
   --r: 10px;
   --r-sm: 6px;
+}
+
+/* ── Light theme ─────────────────────────────────────────────────────────── */
+body.light {
+  --bg: #f5f5f0;
+  --bg2: #eaeae4;
+  --bg3: #ddddd6;
+  --border: rgba(0,0,0,0.09);
+  --border2: rgba(0,0,0,0.16);
+  --text: #18181b;
+  --muted: #6b6b78;
+  --accent: #5a9e0f;
+  --accent2: #437a0a;
+  --accent-text: #ffffff;
+  --red: #dc2626;
+  --amber: #d97706;
+  --green: #16a34a;
+  --blue: #2563eb;
 }
 
 body {
@@ -36,6 +56,7 @@ body {
   line-height: 1.5;
   scrollbar-width: thin;
   scrollbar-color: var(--bg3) transparent;
+  transition: background 0.2s, color 0.2s;
 }
 
 body::-webkit-scrollbar { width: 4px; }
@@ -52,12 +73,14 @@ header {
   position: sticky;
   top: 0;
   z-index: 10;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .logo {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
 }
 
 .logo-mark {
@@ -68,13 +91,14 @@ header {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.2s;
 }
 
 .logo-v {
   font-family: var(--font-head);
   font-weight: 800;
   font-size: 14px;
-  color: #0c0c0e;
+  color: var(--accent-text);
   line-height: 1;
 }
 
@@ -86,17 +110,78 @@ header {
   color: var(--text);
 }
 
-.settings-btn {
+/* Header action buttons group */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.settings-btn, .theme-btn {
   background: none;
   border: none;
   color: var(--muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: 5px;
+  border-radius: 6px;
   display: flex;
-  transition: color 0.15s;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
 }
-.settings-btn:hover { color: var(--text); }
+.settings-btn:hover, .theme-btn:hover {
+  color: var(--text);
+  background: var(--bg3);
+}
+
+/* ── Theme pill (inside settings) ────────────────────────────────────────── */
+.theme-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.theme-toggle-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.theme-pill {
+  display: flex;
+  background: var(--bg3);
+  border-radius: 100px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.theme-pill-btn {
+  background: none;
+  border: none;
+  border-radius: 100px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.theme-pill-btn.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+.theme-pill-btn:not(.active):hover { color: var(--text); }
 
 /* ── Settings panel ──────────────────────────────────────────────────────── */
 .settings-panel {
@@ -104,6 +189,7 @@ header {
   border-bottom: 1px solid var(--border);
   background: var(--bg2);
   animation: slideDown 0.15s ease;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 @keyframes slideDown {
@@ -138,7 +224,7 @@ input[type="text"] {
   font-size: 11px;
   padding: 7px 10px;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.2s, color 0.2s;
 }
 
 input:focus { border-color: var(--accent); }
@@ -146,7 +232,7 @@ input::placeholder { color: var(--muted); }
 
 .btn-save {
   background: var(--accent);
-  color: #0c0c0e;
+  color: var(--accent-text);
   border: none;
   border-radius: var(--r-sm);
   font-family: var(--font-head);
@@ -224,7 +310,7 @@ input::placeholder { color: var(--muted); }
 
 .mode-btn.active {
   border-color: var(--accent);
-  background: rgba(198, 241, 53, 0.07);
+  background: var(--bg3);
 }
 
 .mode-icon { font-size: 20px; }
@@ -239,7 +325,7 @@ input::placeholder { color: var(--muted); }
 /* ── Primary button ──────────────────────────────────────────────────────── */
 .btn-primary {
   background: var(--accent);
-  color: #0c0c0e;
+  color: var(--accent-text);
   border: none;
   border-radius: var(--r-sm);
   font-family: var(--font-head);
@@ -303,13 +389,13 @@ input::placeholder { color: var(--muted); }
 .step.active {
   color: var(--accent);
   border-color: var(--accent);
-  background: rgba(198, 241, 53, 0.1);
+  background: var(--bg3);
 }
 
 .step.done {
   color: var(--green);
-  border-color: rgba(77, 255, 145, 0.3);
-  background: rgba(77, 255, 145, 0.06);
+  border-color: var(--green);
+  background: var(--bg3);
 }
 
 /* ── Result state ────────────────────────────────────────────────────────── */
@@ -332,6 +418,7 @@ input::placeholder { color: var(--muted); }
   border: 1px solid var(--border);
   border-radius: var(--r);
   padding: 14px;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .verdict-top {
@@ -348,10 +435,10 @@ input::placeholder { color: var(--muted); }
   letter-spacing: -0.5px;
 }
 
-.verdict-badge.TRUE       { color: var(--green); }
-.verdict-badge.LIKELY-TRUE { color: #a8e063; }
+.verdict-badge.TRUE        { color: var(--green); }
+.verdict-badge.LIKELY-TRUE { color: var(--green); opacity: 0.8; }
 .verdict-badge.UNVERIFIED  { color: var(--amber); }
-.verdict-badge.MISLEADING  { color: #ff8c42; }
+.verdict-badge.MISLEADING  { color: var(--amber); opacity: 0.85; }
 .verdict-badge.FALSE       { color: var(--red); }
 
 /* Score ring */
@@ -494,7 +581,6 @@ input::placeholder { color: var(--muted); }
   text-decoration: none;
   font-weight: 500;
 }
-
 .source-title:hover { text-decoration: underline; }
 
 .source-url {
@@ -530,8 +616,8 @@ input::placeholder { color: var(--muted); }
 }
 
 .flag-item {
-  background: rgba(255, 140, 66, 0.06);
-  border: 1px solid rgba(255, 140, 66, 0.15);
+  background: var(--bg2);
+  border: 1px solid var(--border);
   border-radius: var(--r-sm);
   padding: 8px 10px;
   font-size: 12px;
