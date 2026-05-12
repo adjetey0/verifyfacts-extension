@@ -1,9 +1,7 @@
 // background.js — VerifyFacts Extension
 // Calls your own backend server — no API key needed by users
 
-// ── IMPORTANT: Replace this with your Railway URL after deploying ──────────
-const BACKEND_URL = "https://your-backend.up.railway.app";
-// ──────────────────────────────────────────────────────────────────────────
+const BACKEND_URL = "https://verifyfacts-extension.onrender.com";
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 chrome.runtime.onInstalled.addListener(() => {
