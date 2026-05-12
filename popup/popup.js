@@ -1,4 +1,4 @@
-// popup.js — VerifyFacts popup controller
+// popup.js — VerifyFacts popup controller (no API key needed)
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let currentPayload = null;
@@ -35,10 +35,8 @@ function saveTheme(theme) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
-  // Build sections AFTER DOM is ready
   sections = {
     settings: $("settingsPanel"),
-    noKey:    $("noKeyNotice"),
     idle:     $("idleState"),
     loading:  $("loadingState"),
     result:   $("resultState"),
@@ -46,21 +44,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   await loadTheme();
-
-  const apiKey = await getApiKey();
-  if (!apiKey) {
-    show("noKey");
-  } else {
-    show("idle");
-    loadStoredApiKey();
-  }
-
+  show("idle");
   bindEvents();
 });
 
 // ── Event bindings ────────────────────────────────────────────────────────────
 function bindEvents() {
-  // Theme toggle button in header
+  // Theme toggle in header
   const themeToggle = $("themeToggle");
   if (themeToggle) {
     themeToggle.addEventListener("click", () => {
@@ -69,7 +59,7 @@ function bindEvents() {
     });
   }
 
-  // Theme pill buttons inside settings
+  // Theme pill in settings
   const darkBtn  = $("darkBtn");
   const lightBtn = $("lightBtn");
   if (darkBtn)  darkBtn.addEventListener("click",  () => saveTheme("dark"));
@@ -78,25 +68,6 @@ function bindEvents() {
   // Settings toggle
   $("settingsToggle").addEventListener("click", () => {
     sections.settings.classList.toggle("hidden");
-    loadStoredApiKey();
-  });
-
-  // Save API key
-  $("saveKey").addEventListener("click", async () => {
-    const key = $("apiKeyInput").value.trim();
-    if (!key) return;
-    await chrome.runtime.sendMessage({ action: "saveApiKey", key });
-    sections.settings.classList.add("hidden");
-    sections.noKey.classList.add("hidden");
-    show("idle");
-    showToast("API key saved ✓");
-  });
-
-  // Go to settings from no-key notice
-  $("goToSettings").addEventListener("click", () => {
-    sections.noKey.classList.add("hidden");
-    sections.settings.classList.remove("hidden");
-    loadStoredApiKey();
   });
 
   // Mode buttons
@@ -185,11 +156,7 @@ async function analyze(payload) {
   });
 
   if (!result.success) {
-    if (result.error === "NO_API_KEY") {
-      show("noKey");
-    } else {
-      showError(result.error || "Analysis failed. Please try again.");
-    }
+    showError(result.error || "Analysis failed. Please try again.");
     return;
   }
 
@@ -226,9 +193,7 @@ function renderResult(data) {
     cl.appendChild(li);
   });
 
-  if (data.claims?.length > 0) {
-    $("highlightBtn").classList.remove("hidden");
-  }
+  if (data.claims?.length > 0) $("highlightBtn").classList.remove("hidden");
 
   const sl = $("sourcesList");
   sl.innerHTML = "";
@@ -325,17 +290,6 @@ function reset() {
   document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
   $("urlRow").classList.add("hidden");
   show("idle");
-}
-
-function getApiKey() {
-  return new Promise(resolve => {
-    chrome.runtime.sendMessage({ action: "getApiKey" }, r => resolve(r?.apiKey));
-  });
-}
-
-async function loadStoredApiKey() {
-  const key = await getApiKey();
-  if (key) $("apiKeyInput").value = key;
 }
 
 function scoreColor(score) {
