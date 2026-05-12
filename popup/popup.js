@@ -1,30 +1,21 @@
 // popup.js — VerifyFacts popup controller
 
-// ── State
+// ── State ─────────────────────────────────────────────────────────────────────
 let currentPayload = null;
 let lastResult = null;
 let highlightsActive = false;
+let sections = {};
 
-// ── DOM refs 
+// ── DOM refs ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const sections = {
-  settings: $("settingsPanel"),
-  noKey: $("noKeyNotice"),
-  idle: $("idleState"),
-  loading: $("loadingState"),
-  result: $("resultState"),
-  error: $("errorState")
-};
 
-// ── Theme 
+// ── Theme ─────────────────────────────────────────────────────────────────────
 function applyTheme(theme) {
   document.body.classList.toggle("light", theme === "light");
-  // Swap header icon
   const moon = $("themeIconMoon");
   const sun  = $("themeIconSun");
   if (moon) moon.classList.toggle("hidden", theme === "light");
   if (sun)  sun.classList.toggle("hidden",  theme !== "light");
-  // Sync pill buttons in settings
   const darkBtn  = $("darkBtn");
   const lightBtn = $("lightBtn");
   if (darkBtn)  darkBtn.classList.toggle("active",  theme !== "light");
@@ -42,9 +33,20 @@ function saveTheme(theme) {
   showToast(theme === "light" ? "Light mode ☀️" : "Dark mode 🌙");
 }
 
-// ── Init 
+// ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
+  // Build sections AFTER DOM is ready
+  sections = {
+    settings: $("settingsPanel"),
+    noKey:    $("noKeyNotice"),
+    idle:     $("idleState"),
+    loading:  $("loadingState"),
+    result:   $("resultState"),
+    error:    $("errorState")
+  };
+
   await loadTheme();
+
   const apiKey = await getApiKey();
   if (!apiKey) {
     show("noKey");
@@ -52,10 +54,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     show("idle");
     loadStoredApiKey();
   }
+
   bindEvents();
 });
 
-// ── Event bindings 
+// ── Event bindings ────────────────────────────────────────────────────────────
 function bindEvents() {
   // Theme toggle button in header
   const themeToggle = $("themeToggle");
@@ -66,7 +69,7 @@ function bindEvents() {
     });
   }
 
-  // Theme pill buttons inside settings panel
+  // Theme pill buttons inside settings
   const darkBtn  = $("darkBtn");
   const lightBtn = $("lightBtn");
   if (darkBtn)  darkBtn.addEventListener("click",  () => saveTheme("dark"));
@@ -130,7 +133,7 @@ function bindEvents() {
   });
 }
 
-// ── Mode handler 
+// ── Mode handler ──────────────────────────────────────────────────────────────
 async function handleMode(mode) {
   document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
   document.querySelector(`[data-mode="${mode}"]`).classList.add("active");
@@ -170,7 +173,7 @@ async function handleMode(mode) {
   analyze(payload);
 }
 
-// ── Analyze
+// ── Analyze ───────────────────────────────────────────────────────────────────
 async function analyze(payload) {
   currentPayload = payload;
   show("loading");
@@ -194,14 +197,12 @@ async function analyze(payload) {
   renderResult(result.data);
 }
 
-// ── Render result
+// ── Render result ─────────────────────────────────────────────────────────────
 function renderResult(data) {
-  // Verdict badge
   const badge = $("verdictBadge");
   badge.textContent = data.verdict || "UNVERIFIED";
   badge.className = "verdict-badge " + (data.verdict || "UNVERIFIED").replace(/\s+/g, "-");
 
-  // Score ring
   const score = Math.min(100, Math.max(0, data.score || 50));
   const circumference = 138.2;
   const offset = circumference - (score / 100) * circumference;
@@ -210,10 +211,8 @@ function renderResult(data) {
   ring.style.stroke = scoreColor(score);
   $("scoreNum").textContent = score;
 
-  // Summary
   $("summary").textContent = data.summary || "";
 
-  // Claims
   const cl = $("claimsList");
   cl.innerHTML = "";
   (data.claims || []).forEach(c => {
@@ -231,7 +230,6 @@ function renderResult(data) {
     $("highlightBtn").classList.remove("hidden");
   }
 
-  // Sources
   const sl = $("sourcesList");
   sl.innerHTML = "";
   (data.sources || []).forEach(s => {
@@ -245,7 +243,6 @@ function renderResult(data) {
     sl.appendChild(li);
   });
 
-  // Flags
   const fl = $("flagsList");
   fl.innerHTML = "";
   if (!data.flags?.length) {
@@ -263,14 +260,14 @@ function renderResult(data) {
   switchTab("claims");
 }
 
-// ── Tabs
+// ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.add("hidden"));
   $(`tab-${name}`).classList.remove("hidden");
 }
 
-// ── Highlights
+// ── Highlights ────────────────────────────────────────────────────────────────
 async function toggleHighlights() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (highlightsActive) {
@@ -287,16 +284,13 @@ async function toggleHighlights() {
   }
 }
 
-// ── Loading animation 
+// ── Loading animation ─────────────────────────────────────────────────────────
 function animateSteps() {
   const steps = ["step1", "step2", "step3"];
   const labels = ["Extracting claims…", "Searching sources…", "Generating verdict…"];
   let i = 0;
 
-  steps.forEach(s => {
-    const el = $(s);
-    el.classList.remove("active", "done");
-  });
+  steps.forEach(s => { $(s).classList.remove("active", "done"); });
   $(steps[0]).classList.add("active");
   $("loadingLabel").textContent = labels[0];
 
@@ -312,10 +306,10 @@ function animateSteps() {
   window._stepInterval = interval;
 }
 
-// ── Utils 
+// ── Utils ─────────────────────────────────────────────────────────────────────
 function show(name) {
   Object.entries(sections).forEach(([key, el]) => {
-    el.classList.toggle("hidden", key !== name);
+    if (el) el.classList.toggle("hidden", key !== name);
   });
 }
 
