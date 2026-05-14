@@ -61,70 +61,43 @@ Analyze the provided content and return ONLY a valid JSON object — no markdown
 }
 Score guide: 80-100 = well-verified true, 60-79 = likely true, 40-59 = unverified/mixed, 20-39 = misleading, 0-19 = false/debunked.`;
 
-    // Current free models on OpenRouter
-    const models = [
-      "mistralai/mistral-7b-instruct:free",
-      "google/gemma-2-9b-it:free",
-      "microsoft/phi-3-mini-128k-instruct:free",
-      "huggingfaceh4/zephyr-7b-beta:free"
-    ];
+    const openRouterRes = await fetch(OPENROUTER_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENROUTER_KEY}`,
+        "HTTP-Referer": "https://verifyfacts-extension.onrender.com",
+        "X-Title": "VerifyFacts"
+      },
+      body: JSON.stringify({
+        model: "openrouter/auto",  // automatically picks best available free model
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 1500,
+        temperature: 0.1
+      })
+    });
 
-    let result = null;
-    let lastError = null;
+    const data = await openRouterRes.json();
 
-    for (const model of models) {
-      try {
-        const openRouterRes = await fetch(OPENROUTER_API, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${OPENROUTER_KEY}`,
-            "HTTP-Referer": "https://verifyfacts-extension.onrender.com",
-            "X-Title": "VerifyFacts"
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: prompt }
-            ],
-            max_tokens: 1500,
-            temperature: 0.1
-          })
-        });
-
-        const data = await openRouterRes.json();
-
-        if (!openRouterRes.ok) {
-          lastError = data.error?.message || `Error ${openRouterRes.status}`;
-          console.log(`Model ${model} failed: ${lastError}`);
-          continue;
-        }
-
-        const text = data.choices?.[0]?.message?.content || "";
-        const clean = text.replace(/```json|```/g, "").trim();
-
-        try {
-          result = JSON.parse(clean);
-        } catch {
-          const match = clean.match(/\{[\s\S]*\}/);
-          if (match) result = JSON.parse(match[0]);
-        }
-
-        if (result) {
-          console.log(`Success with model: ${model}`);
-          break;
-        }
-
-      } catch (e) {
-        lastError = e.message;
-        console.log(`Model ${model} error: ${e.message}`);
-        continue;
-      }
+    if (!openRouterRes.ok) {
+      const msg = data.error?.message || `OpenRouter error ${openRouterRes.status}`;
+      console.error("OpenRouter error:", msg);
+      return res.status(500).json({ error: "Analysis failed. Please try again." });
     }
 
-    if (!result) {
-      return res.status(500).json({ error: lastError || "Could not get a response. Please try again." });
+    const text = data.choices?.[0]?.message?.content || "";
+    const clean = text.replace(/```json|```/g, "").trim();
+
+    let result;
+    try {
+      result = JSON.parse(clean);
+    } catch {
+      const match = clean.match(/\{[\s\S]*\}/);
+      if (match) result = JSON.parse(match[0]);
+      else return res.status(500).json({ error: "Could not parse AI response. Please try again." });
     }
 
     res.json({ success: true, data: result });
