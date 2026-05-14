@@ -61,11 +61,12 @@ Analyze the provided content and return ONLY a valid JSON object — no markdown
 }
 Score guide: 80-100 = well-verified true, 60-79 = likely true, 40-59 = unverified/mixed, 20-39 = misleading, 0-19 = false/debunked.`;
 
-    // Try multiple free models in order until one works
+    // Current free models on OpenRouter
     const models = [
       "mistralai/mistral-7b-instruct:free",
       "google/gemma-2-9b-it:free",
-      "qwen/qwen-2-7b-instruct:free"
+      "microsoft/phi-3-mini-128k-instruct:free",
+      "huggingfaceh4/zephyr-7b-beta:free"
     ];
 
     let result = null;
@@ -92,13 +93,14 @@ Score guide: 80-100 = well-verified true, 60-79 = likely true, 40-59 = unverifie
           })
         });
 
+        const data = await openRouterRes.json();
+
         if (!openRouterRes.ok) {
-          const err = await openRouterRes.json().catch(() => ({}));
-          lastError = err.error?.message || `OpenRouter error ${openRouterRes.status}`;
-          continue; // try next model
+          lastError = data.error?.message || `Error ${openRouterRes.status}`;
+          console.log(`Model ${model} failed: ${lastError}`);
+          continue;
         }
 
-        const data = await openRouterRes.json();
         const text = data.choices?.[0]?.message?.content || "";
         const clean = text.replace(/```json|```/g, "").trim();
 
@@ -109,10 +111,14 @@ Score guide: 80-100 = well-verified true, 60-79 = likely true, 40-59 = unverifie
           if (match) result = JSON.parse(match[0]);
         }
 
-        if (result) break; // success — stop trying models
+        if (result) {
+          console.log(`Success with model: ${model}`);
+          break;
+        }
 
       } catch (e) {
         lastError = e.message;
+        console.log(`Model ${model} error: ${e.message}`);
         continue;
       }
     }
