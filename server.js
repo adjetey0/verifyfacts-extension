@@ -6,14 +6,14 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = "gemini-2.0-flash";
 const GEMINI_API = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));
-app.use(cors({ origin: "*" })); // Allow all Chrome extensions
+app.use(cors({ origin: "*" }));
 
 // Rate limit: 30 requests per user per hour
 const limiter = rateLimit({
@@ -40,7 +40,6 @@ app.post("/analyze", async (req, res) => {
 
     const { url, title, selectedText, pageText, imageUrl, contentType } = req.body;
 
-    // Build prompt
     const parts = [];
     if (url)          parts.push(`Page URL: ${url}`);
     if (title)        parts.push(`Page title: ${title}`);
@@ -51,7 +50,6 @@ app.post("/analyze", async (req, res) => {
 
     const prompt = parts.join("\n\n") || "Analyze the current page for authenticity and credibility.";
 
-    // Call Gemini
     const geminiRes = await fetch(`${GEMINI_API}?key=${GEMINI_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -90,13 +88,11 @@ Score guide: 80-100 = well-verified true, 60-79 = likely true, 40-59 = unverifie
 
     const data = await geminiRes.json();
 
-    // Extract text
     const text = data.candidates?.[0]?.content?.parts
       ?.filter(p => p.text)
       ?.map(p => p.text)
       ?.join("") || "";
 
-    // Parse JSON from response
     const clean = text.replace(/```json|```/g, "").trim();
     let result;
     try {
