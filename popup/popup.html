@@ -19,13 +19,10 @@
       <span class="logo-text">VerifyFacts</span>
     </div>
     <div class="header-actions">
-      <!-- Theme toggle: click to switch dark/light -->
       <button class="theme-btn" id="themeToggle" title="Toggle theme">
-        <!-- Moon = currently in dark mode, click for light -->
         <svg id="themeIconMoon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
         </svg>
-        <!-- Sun = currently in light mode, click for dark -->
         <svg id="themeIconSun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hidden">
           <circle cx="12" cy="12" r="5"/>
           <line x1="12" y1="1" x2="12" y2="3"/>
@@ -46,16 +43,8 @@
     </div>
   </header>
 
-  <!-- ── Settings panel ───────────────────────────────────────────────────── -->
+  <!-- ── Settings panel (theme only) ─────────────────────────────────────── -->
   <section class="settings-panel hidden" id="settingsPanel">
-    <label class="field-label">Google Gemini API Key — Free</label>
-    <div class="api-row">
-      <input type="password" id="apiKeyInput" placeholder="AIza…" spellcheck="false">
-      <button class="btn-save" id="saveKey">Save</button>
-    </div>
-    <p class="hint">Free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> · 1,500 checks/day free</p>
-
-    <!-- Theme selector pill -->
     <div class="theme-toggle-row">
       <span class="theme-toggle-label">Theme</span>
       <div class="theme-pill">
@@ -63,13 +52,6 @@
         <button class="theme-pill-btn" id="lightBtn">☀️ Light</button>
       </div>
     </div>
-  </section>
-
-  <!-- ── No key notice ────────────────────────────────────────────────────── -->
-  <section class="no-key-notice hidden" id="noKeyNotice">
-    <div class="notice-icon">🔑</div>
-    <p>Add your <strong>free</strong> Gemini API key to get started — 1,500 checks per day at no cost.</p>
-    <button class="btn-primary" id="goToSettings">Open settings</button>
   </section>
 
   <!-- ── Idle state ────────────────────────────────────────────────────────── -->
@@ -112,8 +94,6 @@
 
   <!-- ── Result state ─────────────────────────────────────────────────────── -->
   <section class="result-state hidden" id="resultState">
-
-    <!-- Verdict card -->
     <div class="verdict-card" id="verdictCard">
       <div class="verdict-top">
         <div class="verdict-badge" id="verdictBadge">—</div>
@@ -129,25 +109,19 @@
       <p class="summary" id="summary"></p>
     </div>
 
-    <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="claims">Claims</button>
       <button class="tab" data-tab="sources">Sources</button>
       <button class="tab" data-tab="flags">Flags</button>
     </div>
 
-    <!-- Tab: Claims -->
     <div class="tab-panel" id="tab-claims">
       <ul class="claims-list" id="claimsList"></ul>
       <button class="btn-highlight hidden" id="highlightBtn">Highlight on page</button>
     </div>
-
-    <!-- Tab: Sources -->
     <div class="tab-panel hidden" id="tab-sources">
       <ul class="sources-list" id="sourcesList"></ul>
     </div>
-
-    <!-- Tab: Flags -->
     <div class="tab-panel hidden" id="tab-flags">
       <ul class="flags-list" id="flagsList"></ul>
     </div>
