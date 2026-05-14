@@ -1,4 +1,4 @@
-// server.js — VerifyFacts Backend
+// server.js — VerifyFacts Backend (OpenRouter edition)
 require("dotenv").config();
 
 const express = require("express");
@@ -7,9 +7,8 @@ const rateLimit = require("express-rate-limit");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-const GEMINI_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = "gemini-2.0-flash";
-const GEMINI_API = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));
@@ -34,7 +33,7 @@ app.get("/", (req, res) => {
 // ── Main analyze endpoint ─────────────────────────────────────────────────────
 app.post("/analyze", async (req, res) => {
   try {
-    if (!GEMINI_KEY) {
+    if (!OPENROUTER_KEY) {
       return res.status(500).json({ error: "Server not configured. Contact the developer." });
     }
 
@@ -50,18 +49,8 @@ app.post("/analyze", async (req, res) => {
 
     const prompt = parts.join("\n\n") || "Analyze the current page for authenticity and credibility.";
 
-    const geminiRes = await fetch(`${GEMINI_API}?key=${GEMINI_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        tools: [{ google_search: {} }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 1500 },
-        systemInstruction: {
-          parts: [{
-            text: `You are VerifyFacts, an expert fact-checker and media literacy assistant.
-Analyze the provided content using Google Search to find corroborating or contradicting sources.
-Return ONLY a valid JSON object — no markdown, no backticks, no preamble — with this exact structure:
+    const systemPrompt = `You are VerifyFacts, an expert fact-checker and media literacy assistant.
+Analyze the provided content and return ONLY a valid JSON object — no markdown, no backticks, no preamble — with this exact structure:
 {
   "verdict": "TRUE" | "LIKELY TRUE" | "UNVERIFIED" | "MISLEADING" | "FALSE",
   "score": <integer 0-100>,
@@ -71,27 +60,39 @@ Return ONLY a valid JSON object — no markdown, no backticks, no preamble — w
   "flags": ["<red flags like emotional language, missing attribution, implausible claims>"],
   "contentType": "news" | "social" | "document" | "image" | "unknown"
 }
-Score guide: 80-100 = well-verified true, 60-79 = likely true, 40-59 = unverified/mixed, 20-39 = misleading, 0-19 = false/debunked.`
-          }]
-        }
+Score guide: 80-100 = well-verified true, 60-79 = likely true, 40-59 = unverified/mixed, 20-39 = misleading, 0-19 = false/debunked.
+Use your knowledge to fact-check claims and provide credible sources where possible.`;
+
+    const openRouterRes = await fetch(OPENROUTER_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENROUTER_KEY}`,
+        "HTTP-Referer": "https://verifyfacts-extension.onrender.com",
+        "X-Title": "VerifyFacts"
+      },
+      body: JSON.stringify({
+        model: "meta-llama/llama-3.3-70b-instruct:free",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 1500,
+        temperature: 0.1
       })
     });
 
-    if (!geminiRes.ok) {
-      const err = await geminiRes.json().catch(() => ({}));
-      const msg = err.error?.message || `Gemini error ${geminiRes.status}`;
-      if (geminiRes.status === 429) {
+    if (!openRouterRes.ok) {
+      const err = await openRouterRes.json().catch(() => ({}));
+      const msg = err.error?.message || `OpenRouter error ${openRouterRes.status}`;
+      if (openRouterRes.status === 429) {
         return res.status(429).json({ error: "Service is busy. Please try again in a moment." });
       }
       return res.status(500).json({ error: msg });
     }
 
-    const data = await geminiRes.json();
-
-    const text = data.candidates?.[0]?.content?.parts
-      ?.filter(p => p.text)
-      ?.map(p => p.text)
-      ?.join("") || "";
+    const data = await openRouterRes.json();
+    const text = data.choices?.[0]?.message?.content || "";
 
     const clean = text.replace(/```json|```/g, "").trim();
     let result;
