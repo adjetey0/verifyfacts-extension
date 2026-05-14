@@ -51,4 +51,4 @@ User clicks → Extension extracts page content
 
 ## License
 
-MIT — free to use, modify, and distribute.
+© 2025 VerifyFacts. All rights reserved.
