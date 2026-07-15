@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 10000;
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
 
-// ── Middleware ────────────────────────────────────────────────────────────────
+// Middleware
 app.use(express.json({ limit: "10kb" }));
 app.use(cors({ origin: "*" }));
 
@@ -24,12 +24,12 @@ const limiter = rateLimit({
 
 app.use("/analyze", limiter);
 
-// ── Health check ──────────────────────────────────────────────────────────────
+// Health check
 app.get("/", (req, res) => {
   res.json({ status: "VerifyFacts API is running ✓" });
 });
 
-// ── Main analyze endpoint ─────────────────────────────────────────────────────
+// Main analyze endpoint
 app.post("/analyze", async (req, res) => {
   try {
     if (!OPENROUTER_KEY) {
@@ -108,7 +108,7 @@ Score guide: 80-100 = well-verified true, 60-79 = likely true, 40-59 = unverifie
   }
 });
 
-// ── Start ─────────────────────────────────────────────────────────────────────
+// Start
 app.listen(PORT, () => {
   console.log(`VerifyFacts backend running on port ${PORT}`);
 });
