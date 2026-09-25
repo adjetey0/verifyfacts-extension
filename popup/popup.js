@@ -1,15 +1,17 @@
-// popup.js — VerifyFacts popup controller (no API key needed)
+// popup.js — VerifyFacts popup controller
 
-// ── State ─────────────────────────────────────────────────────────────────────
+const BACKEND_URL = "https://verifyfacts-extension.onrender.com";
+
+// State
 let currentPayload = null;
 let lastResult = null;
 let highlightsActive = false;
 let sections = {};
 
-// ── DOM refs ──────────────────────────────────────────────────────────────────
+// DOM refs
 const $ = id => document.getElementById(id);
 
-// ── Theme ─────────────────────────────────────────────────────────────────────
+// Theme
 function applyTheme(theme) {
   document.body.classList.toggle("light", theme === "light");
   const moon = $("themeIconMoon");
@@ -33,7 +35,7 @@ function saveTheme(theme) {
   showToast(theme === "light" ? "Light mode ☀️" : "Dark mode 🌙");
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// Init
 document.addEventListener("DOMContentLoaded", async () => {
   sections = {
     settings: $("settingsPanel"),
@@ -48,9 +50,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
 });
 
-// ── Event bindings ────────────────────────────────────────────────────────────
+// Event bindings
 function bindEvents() {
-  // Theme toggle in header
   const themeToggle = $("themeToggle");
   if (themeToggle) {
     themeToggle.addEventListener("click", () => {
@@ -59,23 +60,19 @@ function bindEvents() {
     });
   }
 
-  // Theme pill in settings
   const darkBtn  = $("darkBtn");
   const lightBtn = $("lightBtn");
   if (darkBtn)  darkBtn.addEventListener("click",  () => saveTheme("dark"));
   if (lightBtn) lightBtn.addEventListener("click", () => saveTheme("light"));
 
-  // Settings toggle
   $("settingsToggle").addEventListener("click", () => {
     sections.settings.classList.toggle("hidden");
   });
 
-  // Mode buttons
   document.querySelectorAll(".mode-btn").forEach(btn => {
     btn.addEventListener("click", () => handleMode(btn.dataset.mode));
   });
 
-  // URL verify
   $("verifyUrl").addEventListener("click", () => {
     const url = $("urlInput").value.trim();
     if (!url) return;
@@ -86,28 +83,27 @@ function bindEvents() {
     if (e.key === "Enter") $("verifyUrl").click();
   });
 
-  // Tab switching
+  $("translateVerifyBtn").addEventListener("click", handleTranslateVerify);
+
   document.querySelectorAll(".tab").forEach(tab => {
     tab.addEventListener("click", () => switchTab(tab.dataset.tab));
   });
 
-  // Highlight toggle
   $("highlightBtn").addEventListener("click", toggleHighlights);
-
-  // Reset
   $("resetBtn").addEventListener("click", reset);
-
-  // Retry
   $("retryBtn").addEventListener("click", () => {
     if (currentPayload) analyze(currentPayload);
     else show("idle");
   });
 }
 
-// ── Mode handler ──────────────────────────────────────────────────────────────
+// Mode handler
 async function handleMode(mode) {
   document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
   document.querySelector(`[data-mode="${mode}"]`).classList.add("active");
+
+  $("urlRow").classList.add("hidden");
+  $("translatePanel").classList.add("hidden");
 
   if (mode === "url") {
     $("urlRow").classList.remove("hidden");
@@ -115,7 +111,11 @@ async function handleMode(mode) {
     return;
   }
 
-  $("urlRow").classList.add("hidden");
+  if (mode === "translate") {
+    $("translatePanel").classList.remove("hidden");
+    $("translateInput").focus();
+    return;
+  }
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -144,7 +144,48 @@ async function handleMode(mode) {
   analyze(payload);
 }
 
-// ── Analyze ───────────────────────────────────────────────────────────────────
+// Translate & Verify
+async function handleTranslateVerify() {
+  const text = $("translateInput").value.trim();
+  if (!text) { showToast("Please enter some text first"); return; }
+
+  const sourceLang = $("sourceLang").value;
+
+  // Skip translation if already English
+  if (sourceLang === "en") {
+    analyze({ selectedText: text, contentType: "unknown" });
+    return;
+  }
+
+  show("loading");
+  $("loadingLabel").textContent = "Translating…";
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/translate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, sourceLang, targetLang: "en" })
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      showError(data.error || "Translation failed.");
+      return;
+    }
+
+    window._translatedFrom = sourceLang;
+    window._translatedText = data.translatedText;
+
+    animateSteps();
+    analyzeTranslated({ selectedText: data.translatedText, contentType: "unknown" });
+
+  } catch (err) {
+    showError("Translation service unavailable. Please try again.");
+  }
+}
+
+// Analyze (normal)
 async function analyze(payload) {
   currentPayload = payload;
   show("loading");
@@ -164,7 +205,25 @@ async function analyze(payload) {
   renderResult(result.data);
 }
 
-// ── Render result ─────────────────────────────────────────────────────────────
+// Analyze (after translation — loading already shown)
+async function analyzeTranslated(payload) {
+  currentPayload = payload;
+
+  const result = await chrome.runtime.sendMessage({
+    action: "analyzeContent",
+    payload
+  });
+
+  if (!result.success) {
+    showError(result.error || "Analysis failed. Please try again.");
+    return;
+  }
+
+  lastResult = result.data;
+  renderResult(result.data);
+}
+
+// Render result
 function renderResult(data) {
   const badge = $("verdictBadge");
   badge.textContent = data.verdict || "UNVERIFIED";
@@ -179,6 +238,17 @@ function renderResult(data) {
   $("scoreNum").textContent = score;
 
   $("summary").textContent = data.summary || "";
+
+  // Translation notice
+  const notice = $("translationNotice");
+  if (window._translatedFrom && window._translatedText) {
+    notice.classList.remove("hidden");
+    $("translationNoticeText").textContent = `Translated from ${langName(window._translatedFrom)} · "${window._translatedText.slice(0, 60)}${window._translatedText.length > 60 ? "…" : ""}"`;
+    window._translatedFrom = null;
+    window._translatedText = null;
+  } else {
+    notice.classList.add("hidden");
+  }
 
   const cl = $("claimsList");
   cl.innerHTML = "";
@@ -225,14 +295,14 @@ function renderResult(data) {
   switchTab("claims");
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────────────────
+// Tabs
 function switchTab(name) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.add("hidden"));
   $(`tab-${name}`).classList.remove("hidden");
 }
 
-// ── Highlights ────────────────────────────────────────────────────────────────
+// Highlights
 async function toggleHighlights() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (highlightsActive) {
@@ -249,7 +319,7 @@ async function toggleHighlights() {
   }
 }
 
-// ── Loading animation ─────────────────────────────────────────────────────────
+// Loading animation
 function animateSteps() {
   const steps = ["step1", "step2", "step3"];
   const labels = ["Extracting claims…", "Searching sources…", "Generating verdict…"];
@@ -271,7 +341,7 @@ function animateSteps() {
   window._stepInterval = interval;
 }
 
-// ── Utils ─────────────────────────────────────────────────────────────────────
+// Utils
 function show(name) {
   Object.entries(sections).forEach(([key, el]) => {
     if (el) el.classList.toggle("hidden", key !== name);
@@ -287,9 +357,23 @@ function reset() {
   lastResult = null;
   currentPayload = null;
   highlightsActive = false;
+  window._translatedFrom = null;
+  window._translatedText = null;
   document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
   $("urlRow").classList.add("hidden");
+  $("translatePanel").classList.add("hidden");
+  if ($("translateInput")) $("translateInput").value = "";
   show("idle");
+}
+
+function langName(code) {
+  const names = {
+    fr: "French", es: "Spanish", ar: "Arabic", pt: "Portuguese",
+    tw: "Twi", ha: "Hausa", yo: "Yoruba", ig: "Igbo",
+    sw: "Swahili", zh: "Chinese", de: "German", ru: "Russian",
+    auto: "detected language"
+  };
+  return names[code] || code;
 }
 
 function scoreColor(score) {
