@@ -3,7 +3,7 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── Dark theme (default) ────────────────────────────────────────────────── */
+/* Dark theme (default) */
 :root {
   --bg: #0c0c0e;
   --bg2: #141418;
@@ -26,7 +26,7 @@
   --r-sm: 6px;
 }
 
-/* ── Light theme ─────────────────────────────────────────────────────────── */
+/*  Light theme */
 body.light {
   --bg: #f5f5f0;
   --bg2: #eaeae4;
@@ -62,7 +62,7 @@ body {
 body::-webkit-scrollbar { width: 4px; }
 body::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 4px; }
 
-/* ── Header ──────────────────────────────────────────────────────────────── */
+/*  Header  */
 header {
   display: flex;
   align-items: center;
@@ -134,7 +134,7 @@ header {
   background: var(--bg3);
 }
 
-/* ── Theme pill (inside settings) ────────────────────────────────────────── */
+/*  Theme pill (inside settings)  */
 .theme-toggle-row {
   display: flex;
   align-items: center;
@@ -183,7 +183,7 @@ header {
 
 .theme-pill-btn:not(.active):hover { color: var(--text); }
 
-/* ── Settings panel ──────────────────────────────────────────────────────── */
+/*  Settings panel  */
 .settings-panel {
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
@@ -253,7 +253,7 @@ input::placeholder { color: var(--muted); }
 .hint a { color: var(--accent); text-decoration: none; }
 .hint a:hover { text-decoration: underline; }
 
-/* ── No key notice ───────────────────────────────────────────────────────── */
+/*  No key notice  */
 .no-key-notice {
   padding: 32px 20px;
   text-align: center;
@@ -265,7 +265,7 @@ input::placeholder { color: var(--muted); }
 .notice-icon { font-size: 28px; }
 .no-key-notice p { color: var(--muted); font-size: 13px; max-width: 220px; }
 
-/* ── Idle state ──────────────────────────────────────────────────────────── */
+/*  Idle state  */
 .idle-state {
   padding: 18px 16px;
 }
@@ -322,7 +322,7 @@ input::placeholder { color: var(--muted); }
   animation: slideDown 0.15s ease;
 }
 
-/* ── Primary button ──────────────────────────────────────────────────────── */
+/*  Primary button  */
 .btn-primary {
   background: var(--accent);
   color: var(--accent-text);
@@ -342,7 +342,7 @@ input::placeholder { color: var(--muted); }
 .btn-primary:hover { background: var(--accent2); }
 .btn-primary:active { transform: scale(0.97); }
 
-/* ── Loading state ───────────────────────────────────────────────────────── */
+/*  Loading state  */
 .loading-state {
   padding: 36px 20px 28px;
   display: flex;
@@ -398,7 +398,7 @@ input::placeholder { color: var(--muted); }
   background: var(--bg3);
 }
 
-/* ── Result state ────────────────────────────────────────────────────────── */
+/*  Result state  */
 .result-state {
   padding: 14px 16px;
   display: flex;
