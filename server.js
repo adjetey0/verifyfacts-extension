@@ -1,4 +1,4 @@
-// server.js — VerifyFacts Backend (OpenRouter edition)
+// server.js — VerifyFacts Backend (OpenRouter + MyMemory Translation)
 require("dotenv").config();
 
 const express = require("express");
@@ -9,6 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
+const MYMEMORY_API = "https://api.mymemory.translated.net/get";
 
 // Middleware
 app.use(express.json({ limit: "10kb" }));
@@ -23,10 +24,39 @@ const limiter = rateLimit({
 });
 
 app.use("/analyze", limiter);
+app.use("/translate", limiter);
 
 // Health check
 app.get("/", (req, res) => {
   res.json({ status: "VerifyFacts API is running ✓" });
+});
+
+// ── Translation endpoint (MyMemory — free, no key needed) ─────────────────────
+app.post("/translate", async (req, res) => {
+  try {
+    const { text, sourceLang, targetLang } = req.body;
+    if (!text) return res.status(400).json({ error: "No text provided." });
+
+    const langPair = `${sourceLang || "auto"}|${targetLang || "en"}`;
+    const url = `${MYMEMORY_API}?q=${encodeURIComponent(text.slice(0, 500))}&langpair=${langPair}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.responseStatus !== 200) {
+      return res.status(500).json({ error: "Translation failed. Please try again." });
+    }
+
+    res.json({
+      success: true,
+      translatedText: data.responseData.translatedText,
+      detectedLang: sourceLang || "auto"
+    });
+
+  } catch (err) {
+    console.error("Translation error:", err);
+    res.status(500).json({ error: "Translation service unavailable." });
+  }
 });
 
 // Main analyze endpoint
@@ -70,7 +100,7 @@ Score guide: 80-100 = well-verified true, 60-79 = likely true, 40-59 = unverifie
         "X-Title": "VerifyFacts"
       },
       body: JSON.stringify({
-        model: "openrouter/auto",  // automatically picks best available free model
+        model: "openrouter/auto",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: prompt }
