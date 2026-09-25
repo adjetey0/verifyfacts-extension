@@ -31,7 +31,7 @@ app.get("/", (req, res) => {
   res.json({ status: "VerifyFacts API is running ✓" });
 });
 
-// ── Translation endpoint (MyMemory — free, no key needed) ─────────────────────
+//  Translation endpoint (MyMemory — free, no key needed) 
 app.post("/translate", async (req, res) => {
   try {
     const { text, sourceLang, targetLang } = req.body;
