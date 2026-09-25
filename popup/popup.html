@@ -10,7 +10,7 @@
 </head>
 <body>
 
-  <!-- ── Header ───────────────────────────────────────────────────────────── -->
+  <!-- Header -->
   <header>
     <div class="logo">
       <div class="logo-mark">
@@ -43,7 +43,7 @@
     </div>
   </header>
 
-  <!-- ── Settings panel (theme only) ─────────────────────────────────────── -->
+  <!-- Settings panel (theme only) -->
   <section class="settings-panel hidden" id="settingsPanel">
     <div class="theme-toggle-row">
       <span class="theme-toggle-label">Theme</span>
@@ -54,7 +54,7 @@
     </div>
   </section>
 
-  <!-- ── Idle state ────────────────────────────────────────────────────────── -->
+  <!-- Idle state -->
   <section class="idle-state" id="idleState">
     <p class="idle-hint">What should I verify?</p>
     <div class="mode-grid">
@@ -74,14 +74,44 @@
         <span class="mode-icon">🔗</span>
         <span>Enter URL</span>
       </button>
+      <button class="mode-btn translate-btn" data-mode="translate">
+        <span class="mode-icon">🌐</span>
+        <span>Translate & Verify</span>
+      </button>
     </div>
+
     <div class="url-row hidden" id="urlRow">
       <input type="url" id="urlInput" placeholder="https://example.com/article">
       <button class="btn-primary small" id="verifyUrl">Go</button>
     </div>
+
+    <!-- Translate panel -->
+    <div class="translate-panel hidden" id="translatePanel">
+      <div class="translate-row">
+        <select id="sourceLang" class="lang-select">
+          <option value="auto">Auto detect</option>
+          <option value="fr">French</option>
+          <option value="es">Spanish</option>
+          <option value="ar">Arabic</option>
+          <option value="pt">Portuguese</option>
+          <option value="tw">Twi</option>
+          <option value="ha">Hausa</option>
+          <option value="yo">Yoruba</option>
+          <option value="ig">Igbo</option>
+          <option value="sw">Swahili</option>
+          <option value="zh">Chinese</option>
+          <option value="de">German</option>
+          <option value="ru">Russian</option>
+        </select>
+        <span class="lang-arrow">→</span>
+        <span class="lang-target">English</span>
+      </div>
+      <textarea id="translateInput" placeholder="Paste text in any language to translate and verify…" rows="4"></textarea>
+      <button class="btn-primary" id="translateVerifyBtn">Translate & Verify</button>
+    </div>
   </section>
 
-  <!-- ── Loading state ────────────────────────────────────────────────────── -->
+  <!-- Loading state -->
   <section class="loading-state hidden" id="loadingState">
     <div class="loader-ring"></div>
     <p class="loading-label" id="loadingLabel">Analyzing content…</p>
@@ -92,7 +122,7 @@
     </div>
   </section>
 
-  <!-- ── Result state ─────────────────────────────────────────────────────── -->
+  <!-- Result state -->
   <section class="result-state hidden" id="resultState">
     <div class="verdict-card" id="verdictCard">
       <div class="verdict-top">
@@ -107,6 +137,9 @@
         </div>
       </div>
       <p class="summary" id="summary"></p>
+      <div class="translation-notice hidden" id="translationNotice">
+        🌐 <span id="translationNoticeText"></span>
+      </div>
     </div>
 
     <div class="tabs">
@@ -129,7 +162,7 @@
     <button class="btn-reset" id="resetBtn">← Verify something else</button>
   </section>
 
-  <!-- ── Error state ──────────────────────────────────────────────────────── -->
+  <!-- Error state -->
   <section class="error-state hidden" id="errorState">
     <div class="error-icon">⚠️</div>
     <p class="error-msg" id="errorMsg"></p>
