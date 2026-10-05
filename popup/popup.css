@@ -19,9 +19,9 @@
   --amber: #ffb347;
   --green: #4dff91;
   --blue: #5eb6ff;
-  --font-head: 'Syne', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  --font-head: 'Segoe UI', sans-serif;
+  --font-body: system-ui, sans-serif;
+  --font-mono: Consolas, monospace;
   --r: 10px;
   --r-sm: 6px;
 }
@@ -511,6 +511,15 @@ textarea#translateInput::placeholder { color: var(--muted); }
 
 .summary { font-size: 12px; color: var(--muted); line-height: 1.6; }
 
+.evidence-disclaimer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 .tabs {
   display: flex;
   gap: 2px;
@@ -559,6 +568,8 @@ textarea#translateInput::placeholder { color: var(--muted); }
 
 .claim-text { color: var(--text); margin-bottom: 3px; }
 .claim-note { color: var(--muted); font-size: 11px; font-style: italic; }
+.claim-source { display: block; margin-top: 4px; color: var(--blue); font-size: 10px; text-decoration: none; }
+.claim-source:hover { text-decoration: underline; }
 
 .claim-status {
   display: inline-block;
@@ -611,6 +622,7 @@ textarea#translateInput::placeholder { color: var(--muted); }
 .source-cred.high   { background: rgba(77,255,145,0.1); color: var(--green); }
 .source-cred.medium { background: rgba(255,179,71,0.1); color: var(--amber); }
 .source-cred.low    { background: rgba(255,82,82,0.1); color: var(--red); }
+.source-cred.unverified { background: rgba(255,179,71,0.1); color: var(--amber); }
 
 .flag-item {
   background: var(--bg2);

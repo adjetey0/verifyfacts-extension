@@ -1,27 +1,24 @@
 // popup.js — VerifyFacts popup controller
 
-const BACKEND_URL = "https://verifyfacts-extension.onrender.com";
+const CONTEXT_ANALYSIS_KEY = "contextAnalysis";
 
-// State
 let currentPayload = null;
+let currentTranslation = null;
 let lastResult = null;
 let highlightsActive = false;
 let sections = {};
+let stepInterval = null;
+let handledContextRequestId = null;
+let displayedContextRequestId = null;
 
-// DOM refs
 const $ = id => document.getElementById(id);
 
-// Theme
 function applyTheme(theme) {
   document.body.classList.toggle("light", theme === "light");
-  const moon = $("themeIconMoon");
-  const sun  = $("themeIconSun");
-  if (moon) moon.classList.toggle("hidden", theme === "light");
-  if (sun)  sun.classList.toggle("hidden",  theme !== "light");
-  const darkBtn  = $("darkBtn");
-  const lightBtn = $("lightBtn");
-  if (darkBtn)  darkBtn.classList.toggle("active",  theme !== "light");
-  if (lightBtn) lightBtn.classList.toggle("active", theme === "light");
+  $("themeIconMoon")?.classList.toggle("hidden", theme === "light");
+  $("themeIconSun")?.classList.toggle("hidden", theme !== "light");
+  $("darkBtn")?.classList.toggle("active", theme !== "light");
+  $("lightBtn")?.classList.toggle("active", theme === "light");
 }
 
 async function loadTheme() {
@@ -30,78 +27,81 @@ async function loadTheme() {
 }
 
 function saveTheme(theme) {
-  chrome.storage.local.set({ theme });
+  chrome.storage.local.set({ theme }).catch(err => console.error("Could not save theme:", err));
   applyTheme(theme);
-  showToast(theme === "light" ? "Light mode ☀️" : "Dark mode 🌙");
+  showToast(theme === "light" ? "Light mode" : "Dark mode");
 }
 
-// Init
 document.addEventListener("DOMContentLoaded", async () => {
   sections = {
     settings: $("settingsPanel"),
-    idle:     $("idleState"),
-    loading:  $("loadingState"),
-    result:   $("resultState"),
-    error:    $("errorState")
+    idle: $("idleState"),
+    loading: $("loadingState"),
+    result: $("resultState"),
+    error: $("errorState")
   };
 
-  await loadTheme();
-  show("idle");
   bindEvents();
+  try {
+    await loadTheme();
+  } catch (err) {
+    console.error("Could not load saved theme:", err);
+    applyTheme("dark");
+  }
+  show("idle");
+  chrome.storage.onChanged.addListener(handleStorageChange);
+  await loadContextAnalysis();
 });
 
-// Event bindings
 function bindEvents() {
-  const themeToggle = $("themeToggle");
-  if (themeToggle) {
-    themeToggle.addEventListener("click", () => {
-      const isLight = document.body.classList.contains("light");
-      saveTheme(isLight ? "dark" : "light");
-    });
-  }
-
-  const darkBtn  = $("darkBtn");
-  const lightBtn = $("lightBtn");
-  if (darkBtn)  darkBtn.addEventListener("click",  () => saveTheme("dark"));
-  if (lightBtn) lightBtn.addEventListener("click", () => saveTheme("light"));
+  $("themeToggle").addEventListener("click", () => {
+    saveTheme(document.body.classList.contains("light") ? "dark" : "light");
+  });
+  $("darkBtn").addEventListener("click", () => saveTheme("dark"));
+  $("lightBtn").addEventListener("click", () => saveTheme("light"));
 
   $("settingsToggle").addEventListener("click", () => {
-    sections.settings.classList.toggle("hidden");
+    $("settingsPanel").classList.toggle("hidden");
   });
 
-  document.querySelectorAll(".mode-btn").forEach(btn => {
-    btn.addEventListener("click", () => handleMode(btn.dataset.mode));
+  document.querySelectorAll(".mode-btn").forEach(button => {
+    button.addEventListener("click", () => void handleMode(button.dataset.mode));
   });
 
   $("verifyUrl").addEventListener("click", () => {
-    const url = $("urlInput").value.trim();
-    if (!url) return;
-    analyze({ url, contentType: "news" });
+    const value = $("urlInput").value.trim();
+    let url;
+    try {
+      url = new URL(value);
+    } catch {
+      showError("Enter a valid public http or https URL.");
+      return;
+    }
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
+      showError("Enter a valid public http or https URL.");
+      return;
+    }
+    void analyze({ url: url.toString(), contentType: "news" });
+  });
+  $("urlInput").addEventListener("keydown", event => {
+    if (event.key === "Enter") $("verifyUrl").click();
   });
 
-  $("urlInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") $("verifyUrl").click();
-  });
-
-  $("translateVerifyBtn").addEventListener("click", handleTranslateVerify);
-
+  $("translateVerifyBtn").addEventListener("click", () => void handleTranslateVerify());
   document.querySelectorAll(".tab").forEach(tab => {
     tab.addEventListener("click", () => switchTab(tab.dataset.tab));
   });
-
-  $("highlightBtn").addEventListener("click", toggleHighlights);
+  $("highlightBtn").addEventListener("click", () => void toggleHighlights());
   $("resetBtn").addEventListener("click", reset);
   $("retryBtn").addEventListener("click", () => {
-    if (currentPayload) analyze(currentPayload);
+    if (currentPayload) void analyze(currentPayload, currentTranslation);
     else show("idle");
   });
 }
 
-// Mode handler
 async function handleMode(mode) {
-  document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
-  document.querySelector(`[data-mode="${mode}"]`).classList.add("active");
-
+  document.querySelectorAll(".mode-btn").forEach(button => button.classList.remove("active"));
+  document.querySelector(`[data-mode="${CSS.escape(mode)}"]`)?.classList.add("active");
   $("urlRow").classList.add("hidden");
   $("translatePanel").classList.add("hidden");
 
@@ -110,260 +110,402 @@ async function handleMode(mode) {
     $("urlInput").focus();
     return;
   }
-
   if (mode === "translate") {
     $("translatePanel").classList.remove("hidden");
     $("translateInput").focus();
     return;
   }
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-  let pageData = {};
   try {
-    const resp = await chrome.tabs.sendMessage(tab.id, { action: "getPageData" });
-    pageData = resp || {};
-  } catch {
-    pageData = { url: tab.url, title: tab.title, pageText: "", contentType: "news" };
-  }
+    const tab = await getActiveTab();
+    await ensureContentScript(tab.id);
+    const pageData = await chrome.tabs.sendMessage(tab.id, { action: "getPageData" });
+    if (mode === "selection" && !pageData.selectedText) {
+      showError("No text selected. Highlight some text on the page first.");
+      return;
+    }
+    if (mode === "image" && !pageData.imageUrl) {
+      showError("No main image was found on this page.");
+      return;
+    }
 
-  if (mode === "selection" && !pageData.selectedText) {
-    showError("No text selected. Highlight some text on the page first.");
+    const payload = {
+      url: pageData.url,
+      title: pageData.title,
+      pageText: mode === "page" ? pageData.pageText : "",
+      selectedText: mode === "selection" ? pageData.selectedText : "",
+      imageUrl: mode === "image" ? pageData.imageUrl : "",
+      contentType: mode === "image" ? "image" : pageData.contentType
+    };
+    await analyze(payload);
+  } catch (err) {
+    showError(err.message || "Could not read this page. Try a different page or enter its URL.");
+  }
+}
+
+async function getActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error("Could not identify the current tab.");
+  return tab;
+}
+
+async function ensureContentScript(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["content.js"]
+  });
+}
+
+async function handleTranslateVerify() {
+  const text = $("translateInput").value.trim();
+  if (!text) {
+    showToast("Please enter some text first");
+    return;
+  }
+  if (text.length > 500) {
+    showError("Translation supports up to 500 characters per request.");
     return;
   }
 
-  const payload = {
-    url: pageData.url,
-    title: pageData.title,
-    pageText: mode === "selection" ? "" : pageData.pageText,
-    selectedText: mode === "selection" ? pageData.selectedText : "",
-    imageUrl: mode === "image" ? pageData.imageUrl : "",
-    contentType: pageData.contentType
-  };
-
-  analyze(payload);
-}
-
-// Translate & Verify
-async function handleTranslateVerify() {
-  const text = $("translateInput").value.trim();
-  if (!text) { showToast("Please enter some text first"); return; }
-
   const sourceLang = $("sourceLang").value;
-
-  // Skip translation if already English
   if (sourceLang === "en") {
-    analyze({ selectedText: text, contentType: "unknown" });
+    await analyze({ selectedText: text, contentType: "unknown" });
     return;
   }
 
   show("loading");
   $("loadingLabel").textContent = "Translating…";
-
   try {
-    const res = await fetch(`${BACKEND_URL}/translate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, sourceLang, targetLang: "en" })
+    const response = await chrome.runtime.sendMessage({
+      action: "translateContent",
+      payload: { text, sourceLang, targetLang: "en" }
     });
-
-    const data = await res.json();
-
-    if (!data.success) {
-      showError(data.error || "Translation failed.");
-      return;
+    if (!response?.success) throw new Error(response?.error || "Translation failed.");
+    const translatedText = response.data?.translatedText;
+    if (typeof translatedText !== "string" || !translatedText.trim()) {
+      throw new Error("Translation returned no text.");
     }
-
-    window._translatedFrom = sourceLang;
-    window._translatedText = data.translatedText;
-
-    animateSteps();
-    analyzeTranslated({ selectedText: data.translatedText, contentType: "unknown" });
-
+    await analyze(
+      { selectedText: translatedText, contentType: "unknown" },
+      { sourceLang, translatedText }
+    );
   } catch (err) {
-    showError("Translation service unavailable. Please try again.");
+    showError(err.message || "Translation service unavailable. Please try again.");
   }
 }
 
-// Analyze (normal)
-async function analyze(payload) {
+async function analyze(payload, translation = null) {
   currentPayload = payload;
+  currentTranslation = translation;
   show("loading");
   animateSteps();
-
-  const result = await chrome.runtime.sendMessage({
-    action: "analyzeContent",
-    payload
-  });
-
-  if (!result.success) {
-    showError(result.error || "Analysis failed. Please try again.");
-    return;
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: "analyzeContent",
+      payload
+    });
+    if (!response?.success) throw new Error(response?.error || "Analysis failed. Please try again.");
+    if (!isAnalysisResult(response.data)) {
+      throw new Error("The analysis service returned an invalid result.");
+    }
+    lastResult = response.data;
+    renderResult(response.data);
+  } catch (err) {
+    showError(err.message || "Analysis failed. Please try again.");
   }
-
-  lastResult = result.data;
-  renderResult(result.data);
 }
 
-// Analyze (after translation — loading already shown)
-async function analyzeTranslated(payload) {
-  currentPayload = payload;
-
-  const result = await chrome.runtime.sendMessage({
-    action: "analyzeContent",
-    payload
-  });
-
-  if (!result.success) {
-    showError(result.error || "Analysis failed. Please try again.");
-    return;
-  }
-
-  lastResult = result.data;
-  renderResult(result.data);
+function isAnalysisResult(data) {
+  return Boolean(data && typeof data === "object" &&
+    typeof data.verdict === "string" && Number.isInteger(data.score) &&
+    typeof data.summary === "string" && Array.isArray(data.claims) &&
+    Array.isArray(data.sources) && Array.isArray(data.flags));
 }
 
-// Render result
 function renderResult(data) {
+  stopSteps();
+  const allowedVerdicts = new Set(["TRUE", "LIKELY TRUE", "UNVERIFIED", "MISLEADING", "FALSE"]);
+  const verdict = allowedVerdicts.has(data.verdict) ? data.verdict : "UNVERIFIED";
   const badge = $("verdictBadge");
-  badge.textContent = data.verdict || "UNVERIFIED";
-  badge.className = "verdict-badge " + (data.verdict || "UNVERIFIED").replace(/\s+/g, "-");
+  badge.textContent = verdict;
+  badge.className = `verdict-badge ${verdict.replace(/\s+/g, "-")}`;
 
-  const score = Math.min(100, Math.max(0, data.score || 50));
+  const score = Number.isInteger(data.score) ? Math.min(100, Math.max(0, data.score)) : 0;
   const circumference = 138.2;
-  const offset = circumference - (score / 100) * circumference;
-  const ring = $("ringFill");
-  ring.style.strokeDashoffset = offset;
-  ring.style.stroke = scoreColor(score);
-  $("scoreNum").textContent = score;
+  $("ringFill").style.strokeDashoffset = circumference - (score / 100) * circumference;
+  $("ringFill").style.stroke = scoreColor(score);
+  $("scoreNum").textContent = String(score);
+  $("summary").textContent = data.summary;
 
-  $("summary").textContent = data.summary || "";
-
-  // Translation notice
   const notice = $("translationNotice");
-  if (window._translatedFrom && window._translatedText) {
+  if (currentTranslation) {
     notice.classList.remove("hidden");
-    $("translationNoticeText").textContent = `Translated from ${langName(window._translatedFrom)} · "${window._translatedText.slice(0, 60)}${window._translatedText.length > 60 ? "…" : ""}"`;
-    window._translatedFrom = null;
-    window._translatedText = null;
+    const translated = currentTranslation.translatedText;
+    $("translationNoticeText").textContent =
+      `Translated from ${langName(currentTranslation.sourceLang)} · "${translated.slice(0, 60)}${translated.length > 60 ? "…" : ""}"`;
   } else {
     notice.classList.add("hidden");
   }
 
-  const cl = $("claimsList");
-  cl.innerHTML = "";
-  (data.claims || []).forEach(c => {
-    const li = document.createElement("li");
-    li.className = `claim-item ${c.status}`;
-    li.innerHTML = `
-      <span class="claim-status ${c.status}">${c.status}</span>
-      <div class="claim-text">${escHtml(c.claim)}</div>
-      ${c.note ? `<div class="claim-note">${escHtml(c.note)}</div>` : ""}
-    `;
-    cl.appendChild(li);
-  });
+  const claimsList = $("claimsList");
+  claimsList.replaceChildren();
+  for (const claim of data.claims) {
+    if (!claim || typeof claim.claim !== "string") continue;
+    const status = ["verified", "unverified", "false"].includes(claim.status)
+      ? claim.status
+      : "unverified";
+    const item = document.createElement("li");
+    item.className = `claim-item ${status}`;
+    const statusLabel = document.createElement("span");
+    statusLabel.className = `claim-status ${status}`;
+    statusLabel.textContent = status;
+    const claimText = document.createElement("div");
+    claimText.className = "claim-text";
+    claimText.textContent = claim.claim;
+    item.append(statusLabel, claimText);
+    if (typeof claim.note === "string" && claim.note) {
+      const note = document.createElement("div");
+      note.className = "claim-note";
+      note.textContent = claim.note;
+      item.append(note);
+    }
+    if (Array.isArray(claim.sourceUrls)) {
+      for (const sourceUrl of claim.sourceUrls) {
+        let url;
+        try {
+          url = new URL(sourceUrl);
+        } catch {
+          continue;
+        }
+        if (url.protocol !== "https:" || url.username || url.password) continue;
+        const sourceLink = document.createElement("a");
+        sourceLink.className = "claim-source";
+        sourceLink.href = url.toString();
+        sourceLink.target = "_blank";
+        sourceLink.rel = "noopener noreferrer";
+        sourceLink.textContent = `Evidence: ${url.hostname}`;
+        item.append(sourceLink);
+      }
+    }
+    claimsList.append(item);
+  }
 
-  if (data.claims?.length > 0) $("highlightBtn").classList.remove("hidden");
+  const highlightButton = $("highlightBtn");
+  highlightButton.classList.toggle("hidden", claimsList.childElementCount === 0 || !currentPayload?.url);
+  highlightButton.textContent = "Highlight on page";
+  highlightsActive = false;
 
-  const sl = $("sourcesList");
-  sl.innerHTML = "";
-  (data.sources || []).forEach(s => {
-    const li = document.createElement("li");
-    li.className = "source-item";
-    li.innerHTML = `
-      <a class="source-title" href="${escHtml(s.url)}" target="_blank">${escHtml(s.title)}</a>
-      <span class="source-url">${escHtml(s.url)}</span>
-      <span class="source-cred ${s.credibility}">${s.credibility} credibility</span>
-    `;
-    sl.appendChild(li);
-  });
+  const sourcesList = $("sourcesList");
+  sourcesList.replaceChildren();
+  for (const source of data.sources) {
+    if (!source || typeof source.url !== "string") continue;
+    let url;
+    try {
+      url = new URL(source.url);
+    } catch {
+      continue;
+    }
+    if (url.protocol !== "https:" || url.username || url.password) continue;
+    const item = document.createElement("li");
+    item.className = "source-item";
+    const link = document.createElement("a");
+    link.className = "source-title";
+    link.href = url.toString();
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = typeof source.title === "string" ? source.title : url.hostname;
+    const label = document.createElement("span");
+    label.className = "source-cred unverified";
+    label.textContent = "Web-search citation · review source";
+    item.append(link, label);
+    sourcesList.append(item);
+  }
+  if (!sourcesList.childElementCount) {
+    const item = document.createElement("li");
+    item.className = "no-flags";
+    item.textContent = "No web-search citations were returned; treat this assessment as unverified.";
+    sourcesList.append(item);
+  }
 
-  const fl = $("flagsList");
-  fl.innerHTML = "";
-  if (!data.flags?.length) {
-    fl.innerHTML = `<li class="no-flags">✓ No red flags detected</li>`;
+  const flagsList = $("flagsList");
+  flagsList.replaceChildren();
+  if (!data.flags.length) {
+    const item = document.createElement("li");
+    item.className = "no-flags";
+    item.textContent = "No additional flags were returned.";
+    flagsList.append(item);
   } else {
-    data.flags.forEach(f => {
-      const li = document.createElement("li");
-      li.className = "flag-item";
-      li.textContent = f;
-      fl.appendChild(li);
-    });
+    for (const flag of data.flags) {
+      if (typeof flag !== "string") continue;
+      const item = document.createElement("li");
+      item.className = "flag-item";
+      item.textContent = flag;
+      flagsList.append(item);
+    }
   }
 
   show("result");
   switchTab("claims");
 }
 
-// Tabs
 function switchTab(name) {
-  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  document.querySelectorAll(".tab-panel").forEach(p => p.classList.add("hidden"));
-  $(`tab-${name}`).classList.remove("hidden");
+  const panel = $(`tab-${name}`);
+  if (!panel) return;
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.classList.toggle("active", tab.dataset.tab === name);
+  });
+  document.querySelectorAll(".tab-panel").forEach(item => item.classList.add("hidden"));
+  panel.classList.remove("hidden");
 }
 
-// Highlights
 async function toggleHighlights() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (highlightsActive) {
-    await chrome.tabs.sendMessage(tab.id, { action: "clearHighlights" });
-    $("highlightBtn").textContent = "Highlight on page";
-    highlightsActive = false;
-  } else {
-    await chrome.tabs.sendMessage(tab.id, {
-      action: "highlightClaims",
-      claims: lastResult?.claims || []
-    });
-    $("highlightBtn").textContent = "Clear highlights";
-    highlightsActive = true;
+  try {
+    const tab = await getActiveTab();
+    await ensureContentScript(tab.id);
+    if (!highlightsActive) {
+      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["content.css"] });
+      await chrome.tabs.sendMessage(tab.id, {
+        action: "highlightClaims",
+        claims: lastResult?.claims || []
+      });
+      $("highlightBtn").textContent = "Clear highlights";
+      highlightsActive = true;
+    } else {
+      await chrome.tabs.sendMessage(tab.id, { action: "clearHighlights" });
+      $("highlightBtn").textContent = "Highlight on page";
+      highlightsActive = false;
+    }
+  } catch (err) {
+    showToast(err.message || "Could not update page highlights.");
   }
 }
 
-// Loading animation
 function animateSteps() {
+  stopSteps();
   const steps = ["step1", "step2", "step3"];
   const labels = ["Extracting claims…", "Searching sources…", "Generating verdict…"];
-  let i = 0;
-
-  steps.forEach(s => { $(s).classList.remove("active", "done"); });
+  let index = 0;
+  steps.forEach(step => $(step).classList.remove("active", "done"));
   $(steps[0]).classList.add("active");
   $("loadingLabel").textContent = labels[0];
-
-  const interval = setInterval(() => {
-    if (i >= steps.length - 1) { clearInterval(interval); return; }
-    $(steps[i]).classList.remove("active");
-    $(steps[i]).classList.add("done");
-    i++;
-    $(steps[i]).classList.add("active");
-    $("loadingLabel").textContent = labels[i];
+  stepInterval = setInterval(() => {
+    if (index >= steps.length - 1) {
+      stopSteps();
+      return;
+    }
+    $(steps[index]).classList.remove("active");
+    $(steps[index]).classList.add("done");
+    index += 1;
+    $(steps[index]).classList.add("active");
+    $("loadingLabel").textContent = labels[index];
   }, 3500);
-
-  window._stepInterval = interval;
 }
 
-// Utils
+function stopSteps() {
+  if (stepInterval !== null) {
+    clearInterval(stepInterval);
+    stepInterval = null;
+  }
+}
+
 function show(name) {
-  Object.entries(sections).forEach(([key, el]) => {
-    if (el) el.classList.toggle("hidden", key !== name);
+  if (name !== "loading") stopSteps();
+  Object.entries(sections).forEach(([key, element]) => {
+    if (element) element.classList.toggle("hidden", key !== name);
   });
 }
 
-function showError(msg) {
-  $("errorMsg").textContent = msg;
+function showError(message) {
+  stopSteps();
+  $("errorMsg").textContent = message;
   show("error");
 }
 
 function reset() {
+  stopSteps();
   lastResult = null;
   currentPayload = null;
+  currentTranslation = null;
   highlightsActive = false;
-  window._translatedFrom = null;
-  window._translatedText = null;
-  document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".mode-btn").forEach(button => button.classList.remove("active"));
   $("urlRow").classList.add("hidden");
   $("translatePanel").classList.add("hidden");
-  if ($("translateInput")) $("translateInput").value = "";
+  $("translateInput").value = "";
   show("idle");
+}
+
+async function loadContextAnalysis() {
+  try {
+    const stored = (await chrome.storage.session.get(CONTEXT_ANALYSIS_KEY))[CONTEXT_ANALYSIS_KEY];
+    await displayContextAnalysis(stored);
+  } catch (err) {
+    console.error("Could not load context-menu analysis:", err);
+  }
+}
+
+function handleStorageChange(changes, areaName) {
+  if (areaName === "session" && changes[CONTEXT_ANALYSIS_KEY]?.newValue) {
+    displayContextAnalysis(changes[CONTEXT_ANALYSIS_KEY].newValue)
+      .catch(err => console.error("Could not display context-menu analysis:", err));
+  }
+}
+
+async function displayContextAnalysis(record) {
+  if (!record?.requestId || record.requestId === displayedContextRequestId) return;
+  if (record.status === "pending") {
+    await startContextAnalysis(record);
+    return;
+  }
+  if (record.status === "loading" || record.status === "processing") {
+    currentPayload = record.payload || null;
+    show("loading");
+    $("loadingLabel").textContent = "Verifying selected content…";
+    return;
+  }
+  if (record.status === "complete" && isAnalysisResult(record.result)) {
+    displayedContextRequestId = record.requestId;
+    currentPayload = record.payload || null;
+    currentTranslation = null;
+    lastResult = record.result;
+    renderResult(record.result);
+  } else if (record.status === "error") {
+    displayedContextRequestId = record.requestId;
+    currentPayload = record.payload || null;
+    showError(record.error || "Context-menu analysis failed.");
+  } else {
+    return;
+  }
+  await chrome.storage.session.remove(CONTEXT_ANALYSIS_KEY);
+}
+
+async function startContextAnalysis(record) {
+  if (record.requestId === handledContextRequestId) return;
+  handledContextRequestId = record.requestId;
+  currentPayload = record.payload;
+  currentTranslation = null;
+  show("loading");
+  animateSteps();
+  try {
+    await chrome.storage.session.set({
+      [CONTEXT_ANALYSIS_KEY]: { ...record, status: "processing" }
+    });
+    const response = await chrome.runtime.sendMessage({
+      action: "analyzeContext",
+      requestId: record.requestId,
+      payload: record.payload
+    });
+    if (!response?.success) {
+      throw new Error(response?.error || "Context-menu analysis failed.");
+    }
+    await displayContextAnalysis({
+      requestId: record.requestId,
+      status: "complete",
+      result: response.data,
+      payload: record.payload
+    });
+  } catch (err) {
+    showError(err.message || "Context-menu analysis failed.");
+  }
 }
 
 function langName(code) {
@@ -371,7 +513,7 @@ function langName(code) {
     fr: "French", es: "Spanish", ar: "Arabic", pt: "Portuguese",
     tw: "Twi", ha: "Hausa", yo: "Yoruba", ig: "Igbo",
     sw: "Swahili", zh: "Chinese", de: "German", ru: "Russian",
-    auto: "detected language"
+    auto: "detected language", en: "English"
   };
   return names[code] || code;
 }
@@ -382,27 +524,21 @@ function scoreColor(score) {
   return "#ff5252";
 }
 
-function escHtml(str) {
-  return String(str || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function showToast(msg) {
-  const existing = document.querySelector(".vf-toast");
-  if (existing) existing.remove();
-  const t = document.createElement("div");
-  t.className = "vf-toast";
-  t.style.cssText = `
+function showToast(message) {
+  document.querySelector(".vf-toast")?.remove();
+  const toast = document.createElement("div");
+  toast.className = "vf-toast";
+  toast.style.cssText = `
     position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
     background:var(--accent);color:var(--accent-text);
     font-family:'DM Mono',monospace;font-size:11px;font-weight:500;
     padding:6px 14px;border-radius:100px;opacity:1;
     transition:opacity 0.4s;z-index:99;white-space:nowrap;
   `;
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 400); }, 1800);
+  toast.textContent = message;
+  document.body.append(toast);
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    setTimeout(() => toast.remove(), 400);
+  }, 1800);
 }

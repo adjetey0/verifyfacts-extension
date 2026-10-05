@@ -1,105 +1,106 @@
-// content.js — injected into every page
-// Extracts page data and highlights claims
+// Injected on demand after the user requests an analysis.
+(() => {
+  if (globalThis.__verifyFactsContentLoaded) return;
+  globalThis.__verifyFactsContentLoaded = true;
 
-let lastPayload = null;
+  const MAX_PAGE_TEXT_LENGTH = 8000;
+  const HIGHLIGHT_CLASS = "verifyai-highlight";
 
-// ── Page data extraction ──────────────────────────────────────────────────────
-function extractPageData() {
-  const selection = window.getSelection()?.toString().trim();
-  const title = document.title;
-  const url = location.href;
+  function extractPageData() {
+    const selection = window.getSelection()?.toString().trim() || "";
+    const hostname = location.hostname;
+    let contentType = "news";
+    if (/twitter\.com|x\.com|facebook\.com|instagram\.com|threads\.net/.test(hostname)) {
+      contentType = "social";
+    } else if (/\.pdf(?:$|[?#])/.test(location.href) ||
+      document.querySelector("embed[type='application/pdf']")) {
+      contentType = "document";
+    }
 
-  // Try to detect content type
-  let contentType = "unknown";
-  const hostname = location.hostname;
-  if (/twitter\.com|x\.com|facebook\.com|instagram\.com|threads\.net/.test(hostname)) {
-    contentType = "social";
-  } else if (/pdf/.test(url) || document.querySelector("embed[type='application/pdf']")) {
-    contentType = "document";
-  } else {
-    contentType = "news";
+    return {
+      url: location.href,
+      title: document.title.slice(0, 300),
+      selectedText: selection.slice(0, MAX_PAGE_TEXT_LENGTH),
+      pageText: extractMainText().slice(0, MAX_PAGE_TEXT_LENGTH),
+      imageUrl: findMainImage(),
+      contentType
+    };
   }
 
-  // Extract main text (strip nav/footer noise)
-  const bodyText = extractMainText();
-
-  // Find main image
-  const imageUrl = findMainImage();
-
-  return {
-    url,
-    title,
-    selectedText: selection || "",
-    pageText: bodyText,
-    imageUrl,
-    contentType
-  };
-}
-
-function extractMainText() {
-  const selectors = ["article", "main", "[role='main']", ".post-content", ".article-body", ".story-body"];
-  for (const sel of selectors) {
-    const el = document.querySelector(sel);
-    if (el) return el.innerText.trim();
+  function extractMainText() {
+    const selectors = ["article", "main", "[role='main']", ".post-content", ".article-body", ".story-body"];
+    for (const selector of selectors) {
+      const element = document.querySelector(selector);
+      if (element?.innerText?.trim()) return element.innerText.trim();
+    }
+    return document.body?.innerText?.trim() || "";
   }
-  return document.body.innerText.trim();
-}
 
-function findMainImage() {
-  const og = document.querySelector("meta[property='og:image']");
-  if (og) return og.content;
-  const img = document.querySelector("article img, main img");
-  if (img) return img.src;
-  return "";
-}
+  function findMainImage() {
+    const ogImage = document.querySelector("meta[property='og:image']");
+    if (ogImage?.content) return ogImage.content;
+    return document.querySelector("article img, main img")?.src || "";
+  }
 
-// ── Message listener ──────────────────────────────────────────────────────────
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === "getPageData") {
-    sendResponse(extractPageData());
-  }
-  if (msg.action === "highlightClaims" && msg.claims) {
-    highlightClaims(msg.claims);
-    sendResponse({ ok: true });
-  }
-  if (msg.action === "clearHighlights") {
+  function highlightClaims(claims) {
     clearHighlights();
-    sendResponse({ ok: true });
-  }
-});
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: node => {
+        const parent = node.parentElement;
+        if (!node.textContent.trim() || parent?.closest("script,style,textarea,input,select,mark")) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const nodes = [];
+    let node;
+    while ((node = walker.nextNode())) nodes.push(node);
 
-// ── Claim highlighter ─────────────────────────────────────────────────────────
-const HIGHLIGHT_CLASS = "verifyai-highlight";
-
-function highlightClaims(claims) {
-  clearHighlights();
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  let node;
-  while ((node = walker.nextNode())) nodes.push(node);
-
-  for (const claim of claims) {
-    const text = claim.claim?.slice(0, 60);
-    if (!text || text.length < 15) continue;
-    for (const tn of nodes) {
-      const idx = tn.textContent.indexOf(text);
-      if (idx === -1) continue;
-      try {
+    for (const claim of claims) {
+      const text = claim.claim?.slice(0, 60);
+      if (!text || text.length < 15) continue;
+      for (const textNode of nodes) {
+        const index = textNode.textContent.indexOf(text);
+        if (index < 0 || !textNode.isConnected) continue;
         const range = document.createRange();
-        range.setStart(tn, idx);
-        range.setEnd(tn, idx + text.length);
+        range.setStart(textNode, index);
+        range.setEnd(textNode, index + text.length);
         const mark = document.createElement("mark");
-        mark.className = `${HIGHLIGHT_CLASS} verifyai-${claim.status}`;
-        mark.title = claim.note || claim.status;
-        range.surroundContents(mark);
-        break;
-      } catch { /* skip complex ranges */ }
+        const status = ["verified", "unverified", "false"].includes(claim.status)
+          ? claim.status
+          : "unverified";
+        mark.className = `${HIGHLIGHT_CLASS} verifyai-${status}`;
+        mark.title = String(claim.note || status).slice(0, 300);
+        try {
+          range.surroundContents(mark);
+          break;
+        } catch {
+          // Skip text ranges that cross complex inline markup.
+        }
+      }
     }
   }
-}
 
-function clearHighlights() {
-  document.querySelectorAll(`.${HIGHLIGHT_CLASS}`).forEach(el => {
-    el.replaceWith(...el.childNodes);
+  function clearHighlights() {
+    document.querySelectorAll(`.${HIGHLIGHT_CLASS}`).forEach(element => {
+      element.replaceWith(...element.childNodes);
+    });
+  }
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === "getPageData") {
+      sendResponse(extractPageData());
+      return;
+    }
+    if (message.action === "highlightClaims" && Array.isArray(message.claims)) {
+      highlightClaims(message.claims);
+      sendResponse({ ok: true });
+      return;
+    }
+    if (message.action === "clearHighlights") {
+      clearHighlights();
+      sendResponse({ ok: true });
+    }
   });
-}
+})();
