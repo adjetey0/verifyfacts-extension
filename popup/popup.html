@@ -17,7 +17,7 @@
       <span class="logo-text">VerifyFacts</span>
     </div>
     <div class="header-actions">
-      <button class="theme-btn" id="themeToggle" title="Toggle theme">
+      <button class="theme-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle color theme">
         <svg id="themeIconMoon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
         </svg>
@@ -33,7 +33,7 @@
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
         </svg>
       </button>
-      <button class="settings-btn" id="settingsToggle" title="Settings">
+      <button class="settings-btn" id="settingsToggle" title="Settings" aria-label="Open appearance settings" aria-expanded="false">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
@@ -54,33 +54,47 @@
 
   <!-- Idle state -->
   <section class="idle-state" id="idleState">
-    <p class="idle-hint">What should I verify?</p>
+    <div class="intro">
+      <p class="eyebrow">A second look at what you read</p>
+      <h1>Check a claim</h1>
+      <p class="intro-copy">Review the evidence and sources. AI can make mistakes, so use this as a starting point.</p>
+    </div>
     <div class="mode-grid">
       <button class="mode-btn" data-mode="page">
         <span class="mode-icon">📰</span>
-        <span>This page</span>
+        <span class="mode-title">This page</span>
+        <span class="mode-description">Assess visible page text</span>
       </button>
       <button class="mode-btn" data-mode="selection">
         <span class="mode-icon">✂️</span>
-        <span>Selection</span>
+        <span class="mode-title">Selection</span>
+        <span class="mode-description">Check highlighted text</span>
       </button>
       <button class="mode-btn" data-mode="image">
         <span class="mode-icon">🖼️</span>
-        <span>Image context</span>
+        <span class="mode-title">Image context</span>
+        <span class="mode-description">URL only, not visual analysis</span>
       </button>
       <button class="mode-btn" data-mode="url">
         <span class="mode-icon">🔗</span>
-        <span>Enter URL</span>
+        <span class="mode-title">Enter a URL</span>
+        <span class="mode-description">Retrieve a public article</span>
       </button>
       <button class="mode-btn translate-btn" data-mode="translate">
         <span class="mode-icon">🌐</span>
-        <span>Translate & Verify</span>
+        <span class="mode-title">Translate &amp; assess</span>
+        <span class="mode-description">Up to 500 characters</span>
       </button>
     </div>
+    <p class="privacy-hint"><span aria-hidden="true">ⓘ</span> Only sent when you choose an option. Text and page details are processed by our backend and service providers.</p>
 
     <div class="url-row hidden" id="urlRow">
-      <input type="url" id="urlInput" placeholder="https://example.com/article">
-      <button class="btn-primary small" id="verifyUrl">Go</button>
+      <label class="field-label" for="urlInput">Public article URL</label>
+      <div class="input-action-row">
+        <input type="url" id="urlInput" placeholder="https://example.com/article" autocomplete="url">
+        <button class="btn-primary small" id="verifyUrl">Assess</button>
+      </div>
+      <p class="field-help">The backend will attempt to retrieve the page text.</p>
     </div>
 
     <!-- Translate panel -->
@@ -104,19 +118,25 @@
         <span class="lang-arrow">→</span>
         <span class="lang-target">English</span>
       </div>
-      <textarea id="translateInput" placeholder="Paste text in any language to translate and verify…" rows="4"></textarea>
-      <button class="btn-primary" id="translateVerifyBtn">Translate & Verify</button>
+      <label class="field-label" for="translateInput">Text to translate and assess</label>
+      <textarea id="translateInput" placeholder="Paste text to translate and assess…" rows="4" maxlength="500" aria-describedby="translationHelp translationCount"></textarea>
+      <div class="input-meta">
+        <p class="field-help" id="translationHelp">Text is sent to the translation provider.</p>
+        <span class="character-count" id="translationCount" aria-live="polite">0 / 500</span>
+      </div>
+      <button class="btn-primary" id="translateVerifyBtn">Translate &amp; assess</button>
     </div>
   </section>
 
   <!-- Loading state -->
-  <section class="loading-state hidden" id="loadingState">
+  <section class="loading-state hidden" id="loadingState" role="status" aria-live="polite">
     <div class="loader-ring"></div>
-    <p class="loading-label" id="loadingLabel">Analyzing content…</p>
+    <p class="loading-label" id="loadingLabel">Preparing your assessment…</p>
+    <p class="loading-copy">Searching for relevant sources. This can take a little while.</p>
     <div class="loading-steps" id="loadingSteps">
-      <div class="step active" id="step1">Extracting claims</div>
-      <div class="step" id="step2">Searching sources</div>
-      <div class="step" id="step3">Generating verdict</div>
+      <div class="step active" id="step1">Preparing</div>
+      <div class="step" id="step2">Searching</div>
+      <div class="step" id="step3">Assessing</div>
     </div>
   </section>
 
@@ -124,37 +144,45 @@
   <section class="result-state hidden" id="resultState">
     <div class="verdict-card" id="verdictCard">
       <div class="verdict-top">
-        <div class="verdict-badge" id="verdictBadge">—</div>
-        <div class="score-ring-wrap">
-          <svg class="score-ring" viewBox="0 0 56 56">
+        <div class="verdict-heading">
+          <span class="eyebrow">AI assessment</span>
+          <div class="verdict-badge" id="verdictBadge" role="status" aria-live="polite">—</div>
+        </div>
+        <div class="score-ring-wrap" id="scoreDisplay" role="img" aria-label="Assessment score">
+          <svg class="score-ring" viewBox="0 0 56 56" aria-hidden="true">
             <circle class="ring-bg" cx="28" cy="28" r="22"/>
             <circle class="ring-fill" id="ringFill" cx="28" cy="28" r="22"
               stroke-dasharray="138.2" stroke-dashoffset="138.2"/>
           </svg>
-          <span class="score-num" id="scoreNum">—</span>
+          <span class="score-num" id="scoreNum" aria-hidden="true">—</span>
         </div>
+        <span class="score-label" id="scoreLabel">Assessment<br>score · not probability</span>
       </div>
       <p class="summary" id="summary"></p>
-      <p class="evidence-disclaimer">AI-generated assessment, not a probability or definitive fact-check. Search citations are unverified; open and assess each source yourself. Images are not visually inspected.</p>
+      <p class="evidence-disclaimer"><strong>Use as a starting point.</strong> The score is not a probability. Open the cited sources and judge their evidence yourself.</p>
+      <p class="scope-notice hidden" id="scopeNotice"></p>
       <div class="translation-notice hidden" id="translationNotice">
         🌐 <span id="translationNoticeText"></span>
       </div>
     </div>
 
     <div class="tabs">
-      <button class="tab active" data-tab="claims">Claims</button>
-      <button class="tab" data-tab="sources">Sources</button>
-      <button class="tab" data-tab="flags">Flags</button>
+      <button class="tab active" data-tab="claims">Claims <span class="tab-count" id="claimsCount">0</span></button>
+      <button class="tab" data-tab="sources">Citations <span class="tab-count" id="sourcesCount">0</span></button>
+      <button class="tab" data-tab="flags">Notes <span class="tab-count" id="flagsCount">0</span></button>
     </div>
 
     <div class="tab-panel" id="tab-claims">
+      <p class="panel-intro">Each claim is assessed separately. “Verified” and “false” labels should have linked citations.</p>
       <ul class="claims-list" id="claimsList"></ul>
       <button class="btn-highlight hidden" id="highlightBtn">Highlight on page</button>
     </div>
     <div class="tab-panel hidden" id="tab-sources">
+      <p class="panel-intro">These links came from web search. A citation is not automatically reliable or relevant—open it and check.</p>
       <ul class="sources-list" id="sourcesList"></ul>
     </div>
     <div class="tab-panel hidden" id="tab-flags">
+      <p class="panel-intro">Limitations or caution notes returned for this assessment.</p>
       <ul class="flags-list" id="flagsList"></ul>
     </div>
 

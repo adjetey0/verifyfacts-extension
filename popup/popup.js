@@ -61,7 +61,8 @@ function bindEvents() {
   $("lightBtn").addEventListener("click", () => saveTheme("light"));
 
   $("settingsToggle").addEventListener("click", () => {
-    $("settingsPanel").classList.toggle("hidden");
+    const isOpen = $("settingsPanel").classList.toggle("hidden") === false;
+    $("settingsToggle").setAttribute("aria-expanded", String(isOpen));
   });
 
   document.querySelectorAll(".mode-btn").forEach(button => {
@@ -88,6 +89,8 @@ function bindEvents() {
   });
 
   $("translateVerifyBtn").addEventListener("click", () => void handleTranslateVerify());
+  $("translateInput").addEventListener("input", updateTranslationCount);
+  updateTranslationCount();
   document.querySelectorAll(".tab").forEach(tab => {
     tab.addEventListener("click", () => switchTab(tab.dataset.tab));
   });
@@ -235,7 +238,15 @@ function renderResult(data) {
   $("ringFill").style.strokeDashoffset = circumference - (score / 100) * circumference;
   $("ringFill").style.stroke = scoreColor(score);
   $("scoreNum").textContent = String(score);
+  $("scoreDisplay").setAttribute("aria-label", `Assessment score ${score} out of 100. Not a probability.`);
   $("summary").textContent = data.summary;
+  const scopeNotice = $("scopeNotice");
+  if (currentPayload?.imageUrl) {
+    scopeNotice.textContent = "Image context only: the image itself was not opened or visually analyzed.";
+    scopeNotice.classList.remove("hidden");
+  } else {
+    scopeNotice.classList.add("hidden");
+  }
 
   const notice = $("translationNotice");
   if (currentTranslation) {
@@ -289,9 +300,17 @@ function renderResult(data) {
     }
     claimsList.append(item);
   }
+  $("claimsCount").textContent = String(claimsList.childElementCount);
+  const claimCount = claimsList.childElementCount;
+  if (!claimCount) {
+    claimsList.append(createEmptyState(
+      "No individual claims returned",
+      "Review the assessment summary and citations, or try a shorter passage."
+    ));
+  }
 
   const highlightButton = $("highlightBtn");
-  highlightButton.classList.toggle("hidden", claimsList.childElementCount === 0 || !currentPayload?.url);
+  highlightButton.classList.toggle("hidden", claimCount === 0 || !currentPayload?.url);
   highlightButton.textContent = "Highlight on page";
   highlightsActive = false;
 
@@ -314,26 +333,36 @@ function renderResult(data) {
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.textContent = typeof source.title === "string" ? source.title : url.hostname;
+    const domain = document.createElement("span");
+    domain.className = "source-domain";
+    domain.textContent = url.hostname;
     const label = document.createElement("span");
     label.className = "source-cred unverified";
-    label.textContent = "Web-search citation · review source";
-    item.append(link, label);
+    label.textContent = "Search citation · unverified";
+    const note = document.createElement("span");
+    note.className = "source-note";
+    note.textContent = "Check that this source directly supports the claim.";
+    item.append(link, domain, label, note);
     sourcesList.append(item);
   }
   if (!sourcesList.childElementCount) {
-    const item = document.createElement("li");
-    item.className = "no-flags";
-    item.textContent = "No web-search citations were returned; treat this assessment as unverified.";
-    sourcesList.append(item);
+    sourcesList.append(createEmptyState(
+      "No citations returned",
+      "This assessment is marked unverified. Try a more specific claim."
+    ));
   }
+  $("sourcesCount").textContent = String(
+    [...sourcesList.children].filter(item => item.classList.contains("source-item")).length
+  );
 
   const flagsList = $("flagsList");
   flagsList.replaceChildren();
   if (!data.flags.length) {
-    const item = document.createElement("li");
-    item.className = "no-flags";
-    item.textContent = "No additional flags were returned.";
-    flagsList.append(item);
+    flagsList.append(createEmptyState(
+      "No additional notes",
+      "This does not mean the content is error-free.",
+      true
+    ));
   } else {
     for (const flag of data.flags) {
       if (typeof flag !== "string") continue;
@@ -343,6 +372,9 @@ function renderResult(data) {
       flagsList.append(item);
     }
   }
+  $("flagsCount").textContent = String(
+    [...flagsList.children].filter(item => item.classList.contains("flag-item")).length
+  );
 
   show("result");
   switchTab("claims");
@@ -356,6 +388,21 @@ function switchTab(name) {
   });
   document.querySelectorAll(".tab-panel").forEach(item => item.classList.add("hidden"));
   panel.classList.remove("hidden");
+}
+
+function createEmptyState(title, description, positive = false) {
+  const item = document.createElement("li");
+  item.className = `empty-state${positive ? " positive" : ""}`;
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  const copy = document.createElement("span");
+  copy.textContent = description;
+  item.append(heading, copy);
+  return item;
+}
+
+function updateTranslationCount() {
+  $("translationCount").textContent = `${$("translateInput").value.length} / 500`;
 }
 
 async function toggleHighlights() {
@@ -383,7 +430,7 @@ async function toggleHighlights() {
 function animateSteps() {
   stopSteps();
   const steps = ["step1", "step2", "step3"];
-  const labels = ["Extracting claims…", "Searching sources…", "Generating verdict…"];
+  const labels = ["Preparing assessment…", "Searching sources…", "Reviewing evidence…"];
   let index = 0;
   steps.forEach(step => $(step).classList.remove("active", "done"));
   $(steps[0]).classList.add("active");
