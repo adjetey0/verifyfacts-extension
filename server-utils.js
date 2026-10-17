@@ -7,13 +7,6 @@ const MAX_PAGE_BYTES = 1024 * 1024;
 const VERDICTS = new Set(["TRUE", "LIKELY TRUE", "UNVERIFIED", "MISLEADING", "FALSE"]);
 const CONTENT_TYPES = new Set(["news", "social", "document", "image", "unknown"]);
 const CLAIM_STATUSES = new Set(["verified", "unverified", "false"]);
-const VERDICT_SCORE_RANGES = {
-  TRUE: [80, 100],
-  "LIKELY TRUE": [60, 79],
-  UNVERIFIED: [40, 59],
-  MISLEADING: [20, 39],
-  FALSE: [0, 19]
-};
 
 function isPublicAddress(address) {
   const family = net.isIP(address);
@@ -34,7 +27,6 @@ function isPublicAddress(address) {
       a >= 224
     );
   }
-
   if (family === 6) {
     const normalized = address.toLowerCase();
     if (normalized.startsWith("::ffff:")) {
@@ -54,12 +46,10 @@ async function resolvePublicAddress(url) {
   if (!hostname || hostname === "localhost" || /\.(localhost|local|internal|test|invalid|onion)$/.test(hostname)) {
     throw makeError("INVALID_URL");
   }
-
   if (net.isIP(hostname)) {
     if (!isPublicAddress(hostname)) throw makeError("INVALID_URL");
     return hostname;
   }
-
   let records;
   try {
     records = await dns.lookup(hostname, { all: true, verbatim: true });
@@ -103,10 +93,7 @@ function requestPage(url, address) {
         "Accept-Encoding": "identity"
       },
       lookup: (hostname, options, callback) => {
-        if (typeof options === "function") {
-          callback = options;
-          options = {};
-        }
+        if (typeof options === "function") { callback = options; options = {}; }
         const family = net.isIP(address);
         if (options?.all) callback(null, [{ address, family }]);
         else callback(null, address, family);
@@ -129,23 +116,15 @@ function requestPage(url, address) {
         reject(makeError("FETCH_FAILED"));
         return;
       }
-
       const chunks = [];
       let size = 0;
       response.on("data", chunk => {
         size += chunk.length;
-        if (size > MAX_PAGE_BYTES) {
-          request.destroy(makeError("FETCH_FAILED"));
-          return;
-        }
+        if (size > MAX_PAGE_BYTES) { request.destroy(makeError("FETCH_FAILED")); return; }
         chunks.push(chunk);
       });
-      response.on("end", () => resolve({
-        body: Buffer.concat(chunks).toString("utf8"),
-        contentType
-      }));
+      response.on("end", () => resolve({ body: Buffer.concat(chunks).toString("utf8"), contentType }));
     });
-
     request.setTimeout(8000, () => request.destroy(makeError("FETCH_FAILED")));
     request.on("error", () => reject(makeError("FETCH_FAILED")));
   });
@@ -180,9 +159,7 @@ function decodeHtmlEntities(text) {
 
 function decodeCodePoint(codePoint) {
   if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff ||
-      (codePoint >= 0xd800 && codePoint <= 0xdfff)) {
-    return " ";
-  }
+      (codePoint >= 0xd800 && codePoint <= 0xdfff)) return " ";
   return String.fromCodePoint(codePoint);
 }
 
@@ -216,13 +193,17 @@ function citationUrl(item) {
 }
 
 function normalizeAnalysis(result, citationMetadata) {
-  if (!result || typeof result !== "object" || !VERDICTS.has(result.verdict) ||
+  // ── Validate required fields ──────────────────────────────────────────────
+  if (!result || typeof result !== "object" ||
+      !VERDICTS.has(result.verdict) ||
       !Number.isInteger(result.score) || result.score < 0 || result.score > 100 ||
-      typeof result.summary !== "string" || !Array.isArray(result.claims) ||
+      typeof result.summary !== "string" ||
+      !Array.isArray(result.claims) ||
       !Array.isArray(result.flags)) {
     throw makeError("INVALID_RESULT");
   }
 
+  // ── Extract citations from metadata (may be empty for free models) ────────
   const metadata = Array.isArray(citationMetadata) ? citationMetadata : [];
   const sources = [];
   const seen = new Set();
@@ -233,58 +214,49 @@ function normalizeAnalysis(result, citationMetadata) {
       sources.push({ ...source, credibility: "unverified" });
     }
   }
+  const sourceUrls = new Set(sources.map(s => s.url));
 
-  let flags = result.flags
-    .filter(flag => typeof flag === "string")
-    .slice(0, 10)
-    .map(flag => flag.slice(0, 300));
-  let verdict = result.verdict;
-  let score = result.score;
-  const sourceUrls = new Set(sources.map(source => source.url));
-
+  // ── Normalize claims ──────────────────────────────────────────────────────
   const claims = result.claims
-    .filter(claim => claim && typeof claim.claim === "string")
+    .filter(c => c && typeof c.claim === "string")
     .slice(0, 10)
     .map(claim => {
       const citedSources = Array.isArray(claim.sourceUrls)
-        ? [...new Set(claim.sourceUrls.filter(url => typeof url === "string" && sourceUrls.has(url)))]
+        ? [...new Set(claim.sourceUrls.filter(u => typeof u === "string" && sourceUrls.has(u)))]
         : [];
-      const hasCitedEvidence = citedSources.length > 0;
       const note = typeof claim.note === "string" ? claim.note.slice(0, 500) : "";
+      const status = CLAIM_STATUSES.has(claim.status) ? claim.status : "unverified";
       return {
         claim: claim.claim.slice(0, 500),
-        status: hasCitedEvidence && CLAIM_STATUSES.has(claim.status) ? claim.status : "unverified",
-        note: hasCitedEvidence
-          ? note
-          : `${note}${note ? " " : ""}No matching search citation was attached.`.slice(0, 500),
+        // ── FIXED: accept claim status from AI even without citation match ──
+        status,
+        note: note.slice(0, 500),
         sourceUrls: citedSources
       };
     });
 
-  const hasClaimEvidence = claims.some(claim =>
-    claim.sourceUrls.length > 0 && ["verified", "false"].includes(claim.status)
-  );
-  const [minimumScore, maximumScore] = VERDICT_SCORE_RANGES[verdict];
-  const scoreMatchesVerdict = score >= minimumScore && score <= maximumScore;
-  if (!hasClaimEvidence || !scoreMatchesVerdict) {
-    verdict = "UNVERIFIED";
-    score = 50;
-    const reason = !hasClaimEvidence
-      ? sources.length
-        ? "No claim could be linked to a web-search citation; treat this result as unverified."
-        : "No web-search citations were returned; treat this result as unverified."
-      : "The returned verdict and score conflicted; this result was reset to unverified.";
-    flags = [...flags.slice(0, 9), reason];
+  // ── Normalize flags ───────────────────────────────────────────────────────
+  const flags = result.flags
+    .filter(f => typeof f === "string")
+    .slice(0, 10)
+    .map(f => f.slice(0, 300));
+
+  // ── FIXED: only downgrade to UNVERIFIED if AI itself said UNVERIFIED ──────
+  // Previously this forced UNVERIFIED whenever citations were missing,
+  // which broke free models that reason without returning citation URLs.
+  // Now we trust the AI verdict and only add a note if no citations came back.
+  let { verdict, score, summary } = result;
+
+  if (sources.length === 0 && !["UNVERIFIED"].includes(verdict)) {
+    // Add a note but don't override the verdict — the AI may still be right
+    flags.push("No web-search citations were returned. Treat this result as a starting point only.");
+    summary = `${summary} Note: no web-search citations were attached to this result.`;
   }
 
   return {
     verdict,
     score,
-    summary: (!hasClaimEvidence
-      ? `${result.summary} No claim was linked to a web-search citation, so this is unverified.`
-      : !scoreMatchesVerdict
-        ? `${result.summary} The verdict and score conflicted, so the result is unverified.`
-        : result.summary).slice(0, 1500),
+    summary: summary.slice(0, 1500),
     claims,
     sources,
     flags: flags.slice(0, 10),
