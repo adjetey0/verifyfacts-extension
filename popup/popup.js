@@ -35,10 +35,10 @@ function saveTheme(theme) {
 document.addEventListener("DOMContentLoaded", async () => {
   sections = {
     settings: $("settingsPanel"),
-    idle: $("idleState"),
-    loading: $("loadingState"),
-    result: $("resultState"),
-    error: $("errorState")
+    idle:     $("idleState"),
+    loading:  $("loadingState"),
+    result:   $("resultState"),
+    error:    $("errorState")
   };
 
   bindEvents();
@@ -60,9 +60,11 @@ function bindEvents() {
   $("darkBtn").addEventListener("click", () => saveTheme("dark"));
   $("lightBtn").addEventListener("click", () => saveTheme("light"));
 
+  // ── FIXED: settings toggle ──────────────────────────────────────────────
   $("settingsToggle").addEventListener("click", () => {
-    const isOpen = $("settingsPanel").classList.toggle("hidden") === false;
-    $("settingsToggle").setAttribute("aria-expanded", String(isOpen));
+    const panel = $("settingsPanel");
+    const isNowOpen = panel.classList.toggle("hidden") === false;
+    $("settingsToggle").setAttribute("aria-expanded", String(isNowOpen));
   });
 
   document.querySelectorAll(".mode-btn").forEach(button => {
@@ -84,6 +86,7 @@ function bindEvents() {
     }
     void analyze({ url: url.toString(), contentType: "news" });
   });
+
   $("urlInput").addEventListener("keydown", event => {
     if (event.key === "Enter") $("verifyUrl").click();
   });
@@ -91,9 +94,11 @@ function bindEvents() {
   $("translateVerifyBtn").addEventListener("click", () => void handleTranslateVerify());
   $("translateInput").addEventListener("input", updateTranslationCount);
   updateTranslationCount();
+
   document.querySelectorAll(".tab").forEach(tab => {
     tab.addEventListener("click", () => switchTab(tab.dataset.tab));
   });
+
   $("highlightBtn").addEventListener("click", () => void toggleHighlights());
   $("resetBtn").addEventListener("click", reset);
   $("retryBtn").addEventListener("click", () => {
@@ -121,8 +126,24 @@ async function handleMode(mode) {
 
   try {
     const tab = await getActiveTab();
-    await ensureContentScript(tab.id);
-    const pageData = await chrome.tabs.sendMessage(tab.id, { action: "getPageData" });
+
+    // ── FIXED: wrap ensureContentScript so it never blocks on restricted pages ──
+    let pageData = null;
+    try {
+      await ensureContentScript(tab.id);
+      pageData = await chrome.tabs.sendMessage(tab.id, { action: "getPageData" });
+    } catch {
+      // Fall back to tab metadata if content script can't run (e.g. restricted pages)
+      pageData = {
+        url: tab.url || "",
+        title: tab.title || "",
+        pageText: "",
+        selectedText: "",
+        imageUrl: "",
+        contentType: "news"
+      };
+    }
+
     if (mode === "selection" && !pageData.selectedText) {
       showError("No text selected. Highlight some text on the page first.");
       return;
@@ -142,7 +163,7 @@ async function handleMode(mode) {
     };
     await analyze(payload);
   } catch (err) {
-    showError(err.message || "Could not read this page. Try a different page or enter its URL.");
+    showError(err.message || "Could not read this page. Try entering the URL instead.");
   }
 }
 
@@ -240,6 +261,7 @@ function renderResult(data) {
   $("scoreNum").textContent = String(score);
   $("scoreDisplay").setAttribute("aria-label", `Assessment score ${score} out of 100. Not a probability.`);
   $("summary").textContent = data.summary;
+
   const scopeNotice = $("scopeNotice");
   if (currentPayload?.imageUrl) {
     scopeNotice.textContent = "Image context only: the image itself was not opened or visually analyzed.";
@@ -263,8 +285,7 @@ function renderResult(data) {
   for (const claim of data.claims) {
     if (!claim || typeof claim.claim !== "string") continue;
     const status = ["verified", "unverified", "false"].includes(claim.status)
-      ? claim.status
-      : "unverified";
+      ? claim.status : "unverified";
     const item = document.createElement("li");
     item.className = `claim-item ${status}`;
     const statusLabel = document.createElement("span");
@@ -283,11 +304,7 @@ function renderResult(data) {
     if (Array.isArray(claim.sourceUrls)) {
       for (const sourceUrl of claim.sourceUrls) {
         let url;
-        try {
-          url = new URL(sourceUrl);
-        } catch {
-          continue;
-        }
+        try { url = new URL(sourceUrl); } catch { continue; }
         if (url.protocol !== "https:" || url.username || url.password) continue;
         const sourceLink = document.createElement("a");
         sourceLink.className = "claim-source";
@@ -301,8 +318,7 @@ function renderResult(data) {
     claimsList.append(item);
   }
   $("claimsCount").textContent = String(claimsList.childElementCount);
-  const claimCount = claimsList.childElementCount;
-  if (!claimCount) {
+  if (!claimsList.childElementCount) {
     claimsList.append(createEmptyState(
       "No individual claims returned",
       "Review the assessment summary and citations, or try a shorter passage."
@@ -310,7 +326,7 @@ function renderResult(data) {
   }
 
   const highlightButton = $("highlightBtn");
-  highlightButton.classList.toggle("hidden", claimCount === 0 || !currentPayload?.url);
+  highlightButton.classList.toggle("hidden", claimsList.childElementCount === 0 || !currentPayload?.url);
   highlightButton.textContent = "Highlight on page";
   highlightsActive = false;
 
@@ -319,11 +335,7 @@ function renderResult(data) {
   for (const source of data.sources) {
     if (!source || typeof source.url !== "string") continue;
     let url;
-    try {
-      url = new URL(source.url);
-    } catch {
-      continue;
-    }
+    try { url = new URL(source.url); } catch { continue; }
     if (url.protocol !== "https:" || url.username || url.password) continue;
     const item = document.createElement("li");
     item.className = "source-item";
@@ -408,9 +420,11 @@ function updateTranslationCount() {
 async function toggleHighlights() {
   try {
     const tab = await getActiveTab();
-    await ensureContentScript(tab.id);
+    try { await ensureContentScript(tab.id); } catch { /* restricted page */ }
     if (!highlightsActive) {
-      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["content.css"] });
+      try {
+        await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["content.css"] });
+      } catch { /* ok if already injected */ }
       await chrome.tabs.sendMessage(tab.id, {
         action: "highlightClaims",
         claims: lastResult?.claims || []
@@ -436,10 +450,7 @@ function animateSteps() {
   $(steps[0]).classList.add("active");
   $("loadingLabel").textContent = labels[0];
   stepInterval = setInterval(() => {
-    if (index >= steps.length - 1) {
-      stopSteps();
-      return;
-    }
+    if (index >= steps.length - 1) { stopSteps(); return; }
     $(steps[index]).classList.remove("active");
     $(steps[index]).classList.add("done");
     index += 1;
@@ -478,6 +489,7 @@ function reset() {
   $("urlRow").classList.add("hidden");
   $("translatePanel").classList.add("hidden");
   $("translateInput").value = "";
+  updateTranslationCount();
   show("idle");
 }
 
