@@ -3,7 +3,7 @@
 An AI-assisted browser extension that helps assess claims in news articles, social media posts, and documents. Results can be incomplete or wrong; always review the cited sources yourself.
 
 ## Installation.....
-
+.
 1. Download and unzip this folder
 2. Go to `chrome://extensions` (or `edge://` / `brave://`)
 3. Enable **Developer mode** → click **"Load unpacked"** → select this folder
