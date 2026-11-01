@@ -34,7 +34,6 @@ function saveTheme(theme) {
 
 document.addEventListener("DOMContentLoaded", async () => {
   sections = {
-    settings: $("settingsPanel"),
     idle:     $("idleState"),
     loading:  $("loadingState"),
     result:   $("resultState"),
@@ -57,16 +56,6 @@ function bindEvents() {
   $("themeToggle").addEventListener("click", () => {
     saveTheme(document.body.classList.contains("light") ? "dark" : "light");
   });
-  $("darkBtn").addEventListener("click", () => saveTheme("dark"));
-  $("lightBtn").addEventListener("click", () => saveTheme("light"));
-
-  // ── FIXED: settings toggle ──────────────────────────────────────────────
-  $("settingsToggle").addEventListener("click", () => {
-    const panel = $("settingsPanel");
-    const isNowOpen = panel.classList.toggle("hidden") === false;
-    $("settingsToggle").setAttribute("aria-expanded", String(isNowOpen));
-  });
-
   document.querySelectorAll(".mode-btn").forEach(button => {
     button.addEventListener("click", () => void handleMode(button.dataset.mode));
   });
