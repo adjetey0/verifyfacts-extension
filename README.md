@@ -9,7 +9,7 @@ An AI-assisted browser extension that helps assess claims in news articles, soci
 3. Enable **Developer mode** → click **"Load unpacked"** → select this folder
 4. Pin the VerifyFacts icon in your toolbar
 
-## Usage..
+## Usage...
 
 - Click the icon → **"This page"** to assess the visible page text
 - Click the icon → **"Selection"** to verify highlighted text
