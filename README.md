@@ -1,4 +1,4 @@
-.......# VerifyFacts — Browser Extension
+........# VerifyFacts — Browser Extension
 
 An AI-assisted browser extension that helps assess claims in news articles, social media posts, and documents. Results can be incomplete or wrong; always review the cited sources yourself.
 
