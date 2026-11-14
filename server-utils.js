@@ -244,7 +244,7 @@ function normalizeAnalysis(result, citationMetadata) {
   // ── FIXED: only downgrade to UNVERIFIED if AI itself said UNVERIFIED ──────
   // Previously this forced UNVERIFIED whenever citations were missing,
   // which broke free models that reason without returning citation URLs.
-  // Now we trust the AI verdict and only add a note if no citations came back.
+  // Now we trust the AI verdict and only add a note if no citations came back to it.
   let { verdict, score, summary } = result;
 
   if (sources.length === 0 && !["UNVERIFIED"].includes(verdict)) {
